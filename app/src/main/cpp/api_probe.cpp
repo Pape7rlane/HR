@@ -117,14 +117,14 @@ std::string buildIdOf(uintptr_t base, const ElfW(Phdr)* ph, size_t n) {
 // 为什么不直接用 dlsym：崩铁的 so 是 android_dlopen_ext 加进它自己的 linker namespace 的，
 // 我们从私有目录 dlopen 进来的这个 so 去 dlsym，NOLOAD 拿不到句柄，RTLD_DEFAULT 也只搜自己那个 namespace。
 // dl_iterate_phdr 给的是进程级的列表，能看见；符号表就在 PT_DYNAMIC 里，自己查一遍最稳。
-uintptr_t dynSymbol(const Mod& m, const char* want) {
+uintptr_t dynSymbol(const Mod& m, const char* want, std::string& why) {
     const ElfW(Dyn)* dyn = nullptr;
     for (size_t i = 0; i < m.n; i++) {
         ElfW(Phdr) h;
         std::memcpy(&h, m.ph + i * sizeof(h), sizeof(h));
         if (h.p_type == PT_DYNAMIC) dyn = reinterpret_cast<const ElfW(Dyn)*>(m.base + uintptr_t(h.p_vaddr));
     }
-    if (!dyn) return 0;
+    if (!dyn) { why = "PT_DYNAMIC 没找到"; return 0; }
     uintptr_t symtab = 0, strtab = 0, hash = 0, gnuhash = 0;
     size_t strsz = 0, syment = sizeof(ElfW(Sym));
     for (const ElfW(Dyn)* d = dyn; d->d_tag != DT_NULL; ++d) {
@@ -138,7 +138,11 @@ uintptr_t dynSymbol(const Mod& m, const char* want) {
     // bionic 已经把这两个重定位成绝对地址；万一给的是偏移就补上基址。
     auto fix = [&](uintptr_t p) { return (p && p < m.base) ? m.base + p : p; };
     symtab = fix(symtab); strtab = fix(strtab); hash = fix(hash); gnuhash = fix(gnuhash);
-    if (!symtab || !strtab || !strsz || syment < sizeof(ElfW(Sym))) return 0;
+    if (!symtab || !strtab || !strsz || syment < sizeof(ElfW(Sym))) {
+        char b[160];
+        std::snprintf(b, sizeof b, "动态段不全 symtab=%#zx strtab=%#zx strsz=%zu syment=%zu", size_t(symtab), size_t(strtab), strsz, syment);
+        why = b; return 0;
+    }
 
     size_t count = 0;
     if (hash) {
@@ -155,7 +159,7 @@ uintptr_t dynSymbol(const Mod& m, const char* want) {
         while (count < 400000 && (chains[count - symoffset] & 1u) == 0) count++;
         count++;
     } else {
-        return 0;
+        why = "既没有 DT_HASH 也没有 DT_GNU_HASH"; return 0;
     }
     if (count > 400000) count = 400000;
 
@@ -166,11 +170,22 @@ uintptr_t dynSymbol(const Mod& m, const char* want) {
         const char* n = reinterpret_cast<const char*>(strtab + nameOff);
         if (std::strcmp(n, want) == 0) return m.base + uintptr_t(syms[i].st_value);
     }
+    char b[200];
+    std::snprintf(b, sizeof b, "扫了 %zu 个符号没命中（symtab=%#zx strtab=%#zx）", count, size_t(symtab), size_t(strtab));
+    why = b;
     return 0;
 }
 }  // namespace
 
 namespace ms::probe {
+
+// 已知版本的关键符号 RVA。这些值是 tools/scan_game.py 从 APK 里算出来的，
+// 跟运行时 dl_iterate_phdr 拿到的 Build ID 核对后才用——对不上就不碰。
+// 走这条比查符号表直接，符号表那条留着兜未来版本。
+struct KnownSymbol { const char* buildId; const char* name; uintptr_t rva; };
+static const KnownSymbol kKnown[] = {
+    {"8c76cb8b4f65ae2a", "il2cpp_get_api_table", 0x6dcdc4c},
+};
 
 void apiTable(const std::string& path) {
     std::vector<Mod> mods;
@@ -185,7 +200,18 @@ void apiTable(const std::string& path) {
     // 先自己查符号表（绕开 linker namespace），再退回 dlsym 三条老路。
     TableFn getTable = nullptr;
     uintptr_t bySymbol = 0;
-    for (const auto& m : mods) if (m.name == "libil2cpp.so") { bySymbol = dynSymbol(m, "il2cpp_get_api_table"); if (bySymbol) break; }
+    std::string why, how;
+    for (const auto& m : mods) {
+        if (m.name != "libil2cpp.so") continue;
+        const std::string bid = buildIdOf(m.base, m.ph, m.n);
+        for (const auto& k : kKnown) {
+            if (bid == k.buildId && std::strcmp(k.name, "il2cpp_get_api_table") == 0) {
+                bySymbol = m.base + k.rva; how = "已知 RVA"; break;
+            }
+        }
+        if (!bySymbol) { bySymbol = dynSymbol(m, "il2cpp_get_api_table", why); if (bySymbol) how = "符号表"; }
+        if (bySymbol) break;
+    }
     if (bySymbol) getTable = reinterpret_cast<TableFn>(bySymbol);
     auto tryHandle = [&](void* h) {
         if (h && !getTable) getTable = reinterpret_cast<TableFn>(dlsym(h, "il2cpp_get_api_table"));
@@ -196,7 +222,7 @@ void apiTable(const std::string& path) {
     if (!getTable) {
         std::string seen;
         for (const auto& m : mods) if (m.name.find("cpp") != std::string::npos || m.name.find("unity") != std::string::npos) seen += m.name + " ";
-        throw std::runtime_error("找不到 il2cpp_get_api_table；进程里相关的库：" + (seen.empty() ? std::string("（没有名字含 cpp/unity 的模块）") : seen));
+        throw std::runtime_error("找不到 il2cpp_get_api_table（符号表：" + (why.empty() ? std::string("未尝试") : why) + "）；进程里相关的库：" + (seen.empty() ? std::string("（没有名字含 cpp/unity 的模块）") : seen));
     }
 
     std::string out;
@@ -218,8 +244,8 @@ void apiTable(const std::string& path) {
     }
 
     Place fnAt = locate(mods, reinterpret_cast<uintptr_t>(getTable));
-    std::snprintf(line, sizeof line, "\nil2cpp_get_api_table @ %p (%s)\n%s\n",
-                  reinterpret_cast<void*>(getTable), fnAt.text.c_str(),
+    std::snprintf(line, sizeof line, "\nil2cpp_get_api_table @ %p（来源 %s）(%s)\n%s\n",
+                  reinterpret_cast<void*>(getTable), how.c_str(), fnAt.text.c_str(),
                   codeWords(mods, reinterpret_cast<uintptr_t>(getTable), 6).c_str());
     out += line;
 
