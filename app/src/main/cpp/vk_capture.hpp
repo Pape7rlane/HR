@@ -99,8 +99,13 @@ class Tracker {
   out.push_back(std::move(b));}
 public:
  std::atomic<bool> enabled{false};
+ std::atomic<size_t> bufferCount{0},vertexCount{0};
  std::atomic<bool> allForms{true};   // false (match / collect): the data as uploaded only, one pass over it
- void created(uint64_t buffer,uint64_t size,uint32_t usage){if(!(usage&(indexUsage|vertexUsage|transferSrc)))return;std::lock_guard<std::mutex> l(m);Buffer b;b.size=size;b.usage=usage;b.isVertex=(usage&vertexUsage)!=0;buffers[buffer]=std::move(b);}
+ void created(uint64_t buffer,uint64_t size,uint32_t usage){
+  if(!(usage&(indexUsage|vertexUsage|transferSrc)))return;
+  const bool vtx=(usage&vertexUsage)!=0;
+  bufferCount.fetch_add(1,std::memory_order_relaxed);if(vtx)vertexCount.fetch_add(1,std::memory_order_relaxed);
+  std::lock_guard<std::mutex> l(m);Buffer b;b.size=size;b.usage=usage;b.isVertex=vtx;buffers[buffer]=std::move(b);}
  void destroyed(uint64_t buffer){std::lock_guard<std::mutex> l(m);buffers.erase(buffer);}
  void bound(uint64_t buffer,uint64_t memory,uint64_t offset){std::lock_guard<std::mutex> l(m);auto b=buffers.find(buffer);if(b==buffers.end())return;b->second.memory=memory;b->second.memoryOffset=offset;b->second.bound=true;}
  void mapped(uint64_t memory,uint64_t offset,uint64_t size,const void* p){std::lock_guard<std::mutex> l(m);maps[memory]={static_cast<const uint8_t*>(p),offset,size};}
@@ -138,8 +143,8 @@ public:
  void installed(bool ok,const std::string& error){std::lock_guard<std::mutex> l(m);st.installed=ok;st.error=error;enabled=ok;}
  std::vector<Blob> take(){std::lock_guard<std::mutex> l(m);std::vector<Blob> r;r.swap(out);return r;}
  std::vector<VertexBlob> takeVertex(){std::lock_guard<std::mutex> l(m);std::vector<VertexBlob> r;r.swap(vertexOut);return r;}
- // 有几个 buffer、其中几个是 vertex usage —— 用来判断 Vulkan 到底有没有被用。
- std::pair<size_t,size_t> counts(){std::lock_guard<std::mutex> l(m);size_t v=0;for(const auto& kv:buffers)if(kv.second.isVertex)v++;return {buffers.size(),v};}
+ // 计数用原子量，不持锁遍历 —— 那会在渲染线程上撞锁直接崩。
+ std::pair<size_t,size_t> counts() const {return {bufferCount.load(std::memory_order_relaxed),vertexCount.load(std::memory_order_relaxed)};}
  Stats stats(){std::lock_guard<std::mutex> l(m);return st;}
 };
 inline Tracker& tracker(){static Tracker t;return t;}
