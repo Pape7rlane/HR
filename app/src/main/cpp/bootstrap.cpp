@@ -90,6 +90,16 @@ int findImage(dl_phdr_info* info,size_t,void* ptr){std::string name=info->dlpi_n
   if(out.base&&out.rank<=int(i))return 0;               // 更靠前的候选已经收下
   out={info->dlpi_addr,info->dlpi_phdr,info->dlpi_phnum,name,int(i)};return 1;}
  return 0;}
+int findManaged(dl_phdr_info* info,size_t,void* ptr){std::string name=info->dlpi_name?info->dlpi_name:"";auto p=name.find_last_of('/');name=name.substr(p==name.npos?0:p+1);
+ if(name!="libil2cpp.so")return 0;auto& out=*static_cast<Image*>(ptr);out={info->dlpi_addr,info->dlpi_phdr,info->dlpi_phnum,name,0};return 1;}
+std::string jstringValue(JNIEnv* env,jstring s){ms::require(s!=nullptr,"Java 字符串为空");const char* p=env->GetStringUTFChars(s,nullptr);ms::require(p!=nullptr,"无法解码 Java 字符串");std::string out=p;env->ReleaseStringUTFChars(s,p);return out;}
+void exception(JNIEnv* env,const std::exception& e){env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),e.what());}
+std::string sharedDir(const std::string& pkg){return "/storage/emulated/0/Android/media/"+pkg+"/HSRBox";}
+// Start-up lines go to the same "HSRBox Log.txt" as the runtime (logger "bootstrap", XXMI line format).
+void bootLog(const std::string& pkg,const std::string& state,const std::string& detail=""){try{auto dir=sharedDir(pkg);auto level=ms::levelOf(state);if(int(level)<ms::logThresholdOf(dir))return;
+ std::filesystem::create_directories(dir);ms::appendLog(dir,ms::logLine("bootstrap",level,detail.empty()?state:state+' '+detail));}catch(const std::exception&){}}
+void bootStatus(const std::string& pkg,const std::string& state,const std::string& detail){auto dir=sharedDir(pkg);try{std::filesystem::create_directories(dir);auto s="{\"state\":"+ms::quote(state)+",\"detail\":"+ms::quote(detail)+",\"characterId\":0,\"model\":\"\"}";ms::write(dir+"/status.json.tmp",s);std::filesystem::rename(dir+"/status.json.tmp",dir+"/status.json");}catch(const std::exception&){}bootLog(pkg,state,detail);}
+}
 // 诊断：进程里到底加载了哪些模块。找不到 libil2cpp.so 时用它一次看清。
 struct ModuleList{std::string text;size_t n=0;};
 int collectModule(dl_phdr_info* info,size_t,void* p){
@@ -102,16 +112,7 @@ int collectModule(dl_phdr_info* info,size_t,void* p){
  return 0;}
 void dumpModules(const std::string& pkg){ModuleList l;dl_iterate_phdr(collectModule,&l);
  bootLog(pkg,"modules","已加载 "+std::to_string(l.n)+" 个 lib*.so："+l.text);}
-int findManaged(dl_phdr_info* info,size_t,void* ptr){std::string name=info->dlpi_name?info->dlpi_name:"";auto p=name.find_last_of('/');name=name.substr(p==name.npos?0:p+1);
- if(name!="libil2cpp.so")return 0;auto& out=*static_cast<Image*>(ptr);out={info->dlpi_addr,info->dlpi_phdr,info->dlpi_phnum,name,0};return 1;}
-std::string jstringValue(JNIEnv* env,jstring s){ms::require(s!=nullptr,"Java 字符串为空");const char* p=env->GetStringUTFChars(s,nullptr);ms::require(p!=nullptr,"无法解码 Java 字符串");std::string out=p;env->ReleaseStringUTFChars(s,p);return out;}
-void exception(JNIEnv* env,const std::exception& e){env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),e.what());}
-std::string sharedDir(const std::string& pkg){return "/storage/emulated/0/Android/media/"+pkg+"/HSRBox";}
-// Start-up lines go to the same "HSRBox Log.txt" as the runtime (logger "bootstrap", XXMI line format).
-void bootLog(const std::string& pkg,const std::string& state,const std::string& detail=""){try{auto dir=sharedDir(pkg);auto level=ms::levelOf(state);if(int(level)<ms::logThresholdOf(dir))return;
- std::filesystem::create_directories(dir);ms::appendLog(dir,ms::logLine("bootstrap",level,detail.empty()?state:state+' '+detail));}catch(const std::exception&){}}
-void bootStatus(const std::string& pkg,const std::string& state,const std::string& detail){auto dir=sharedDir(pkg);try{std::filesystem::create_directories(dir);auto s="{\"state\":"+ms::quote(state)+",\"detail\":"+ms::quote(detail)+",\"characterId\":0,\"model\":\"\"}";ms::write(dir+"/status.json.tmp",s);std::filesystem::rename(dir+"/status.json.tmp",dir+"/status.json");}catch(const std::exception&){}bootLog(pkg,state,detail);}
-}
+
 extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv* env,jclass,jstring jp,jstring jd){try{
  auto pkg=jstringValue(env,jp),priv=jstringValue(env,jd);ms::require(pkg=="com.miHoYo.hkrpg"||pkg=="com.miHoYo.hkrpg.bilibili"||pkg=="com.HoYoverse.hkrpgoversea"||pkg=="com.HoYoverse.hkrpgoverseacbtest"||pkg=="com.HoYoverse.hkrpgoverseacbtest","不支持的包名");if(started.exchange(true))return;
  // The index-buffer hashes (vk_capture.hpp) hook the Vulkan loader now, before the game makes its device; only when
