@@ -204,6 +204,16 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
        for(auto& v:blobs){
          std::snprintf(b,sizeof b,"\nseq=%llu 声明大小=%llu 留存=%u\n",(unsigned long long)v.seq,(unsigned long long)v.declared,v.bytes);
          out+=b;
+         std::snprintf(b,sizeof b,"  布局:");out+=b;
+         for(auto& a:v.layout){
+           const char* tn="?";
+           switch(a.type){case 0x1400:tn="BYTE";break;case 0x1401:tn="UBYTE";break;case 0x1402:tn="SHORT";break;
+             case 0x1403:tn="USHORT";break;case 0x1404:tn="INT";break;case 0x1405:tn="UINT";break;
+             case 0x1406:tn="FLOAT";break;case 0x140B:tn="HALF";break;}
+           std::snprintf(b,sizeof b," [%u]%ux%s@%#zx",a.index,a.size,tn,(size_t)a.offset);out+=b;
+         }
+         out+="\n";
+         if(!v.layout.empty()) std::snprintf(b,sizeof b,"  stride=%u\n",v.layout[0].stride),out+=b;
          size_t strides[3]={24,32,20};
          for(size_t st:strides){
            std::snprintf(b,sizeof b,"  stride %zu:\n",st);out+=b;

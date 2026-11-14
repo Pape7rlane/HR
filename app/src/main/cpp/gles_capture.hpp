@@ -12,11 +12,14 @@
 
 namespace ms::gles {
 
+struct Attrib {uint32_t index=0,size=0,type=0,normalized=0,stride=0; uintptr_t offset=0;};
+
 struct Blob {
     uint64_t seq = 0;
     uint32_t bytes = 0;          // 实际留存字节数
     uint64_t declared = 0;       // 调用时报的 size（可能远大于留存量）
     std::vector<uint8_t> data;
+    std::vector<Attrib> layout;  // 上传这一刻的 attrib 配置，缓冲对应的真实布局
 };
 
 struct Stats {
@@ -37,9 +40,7 @@ Stats stats();
 // 取走已捕获的顶点缓冲（swap，O(1)）。
 std::vector<Blob> take();
 
-// 顶点属性布局：glVertexAttribPointer 每次声明的 (index, size, type, stride, offset)。
-// 这是游戏自己告诉 GL 的布局，不用猜。
-struct Attrib {uint32_t index=0,size=0,type=0,normalized=0,stride=0; uintptr_t offset=0;};
+// 当前累积的属性声明（最近 64 条，去重）
 std::vector<Attrib> attribs();
 
 }  // namespace ms::gles

@@ -22,6 +22,8 @@ using GlVertexAttribPointer = void (*)(uint32_t, int32_t, uint32_t, uint8_t, int
 GlVertexAttribPointer g_attribOrig = nullptr;
 std::mutex g_am;
 std::vector<ms::gles::Attrib> g_attribs;
+ms::gles::Attrib g_state[16];      // 按 index 记录当前声明
+bool g_stateUsed[16] = {false};
 
 GlBufferData g_glBufferData = nullptr;
 GlBufferSubData g_glBufferSubData = nullptr;
@@ -46,6 +48,7 @@ void record(uint32_t target, int64_t size, const void* data) {
     std::lock_guard<std::mutex> l(g_m);
     if (g_out.size() >= kKeepBlobs) return;
     ms::gles::Blob b;
+    for (int i = 0; i < 16; i++) if (g_stateUsed[i]) b.layout.push_back(g_state[i]);
     b.seq = ++g_seq;
     b.declared = uint64_t(size);
     const size_t keep = size_t(size) > kKeepBytes ? kKeepBytes : size_t(size);
@@ -65,6 +68,10 @@ void onAttribPointer(uint32_t index, int32_t size, uint32_t type, uint8_t normal
                     a.stride == uint32_t(stride) && a.offset == uintptr_t(ptr)) { dup = true; break; }
             if (!dup) g_attribs.push_back({index, uint32_t(size), type, normalized, uint32_t(stride), uintptr_t(ptr)});
         }
+    }
+    if (index < 16) {
+        g_state[index] = {index, uint32_t(size), type, normalized, uint32_t(stride), uintptr_t(ptr)};
+        g_stateUsed[index] = true;
     }
     if (g_attribOrig) g_attribOrig(index, size, type, normalized, stride, ptr);
 }
