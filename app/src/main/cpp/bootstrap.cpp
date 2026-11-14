@@ -142,6 +142,14 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
        bootLog(pkg,"unity-symbols","可用 "+std::to_string(n)+" 个，已写出 unity-symbols.txt");}
    catch(const std::exception& e){bootLog(pkg,"unity-symbols-failed",e.what());}}}
 
+ // 蒙皮函数计数：挂了才知道游戏走 CPU 蒙皮还是 GPU 蒙皮。只计数不改数据。
+ {bool want=true;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("skinProbe");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
+  if(want){try{const size_t n=ms::probe::hookSkinning();
+       bootLog(pkg,"skin-hook","挂上 "+std::to_string(n)+" 个蒙皮函数，开始计数");
+       std::thread([pkg]{for(int i=1;i<=6;i++){std::this_thread::sleep_for(std::chrono::seconds(10));
+         bootLog(pkg,"skin-count","第 "+std::to_string(i*10)+" 秒累计调用 "+std::to_string(ms::probe::skinCallCount())+" 次");}}).detach();}
+   catch(const std::exception& e){bootLog(pkg,"skin-hook-failed",e.what());}}}
+
  // 内存里找明文 global-metadata.dat：磁盘上那份是 MHY\0 加密的，il2cpp 要用就得先解密进内存，
  // 直接拿内存里那份，绕开解密逻辑。结果写到 HSRBox 目录下的 global-metadata.dat。
  {bool want=false;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("memScan");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}

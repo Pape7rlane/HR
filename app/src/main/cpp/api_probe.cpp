@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cstring>
 #include <fstream>
+#include <atomic>
+#include "dobby.h"
 #include <dlfcn.h>
 #include <link.h>
 #include <stdexcept>
@@ -463,22 +465,21 @@ size_t probeUnitySymbols(const std::string& outPath) {
 
     std::string out = "# HSRBox —— libunity.so 导出符号探测\n";
     char b[300];
-    std::snprintf(b, sizeof b, "libunity.so base=%#zx build=%s\n\n%-40s %-14s %-18s %s\n",
-                  size_t(unity->base), unity->buildId.c_str(), "符号", "槽地址", "指向", "落点");
+    std::snprintf(b, sizeof b, "libunity.so base=%#zx build=%s\n\n%-40s %-16s %-28s %s\n",
+                  size_t(unity->base), unity->buildId.c_str(), "符号", "函数地址", "落点", "开头指令");
     out += b;
 
     size_t found = 0;
     for (const char* name : kNames) {
         static std::string why;
         why.clear();
-        uintptr_t slot = dynSymbol(*unity, name, why);
-        if (!slot) { std::snprintf(b, sizeof b, "%-40s %s\n", name, "未找到"); out += b; continue; }
-        // 槽里存的是函数指针
-        uintptr_t fn = 0;
-        std::memcpy(&fn, reinterpret_cast<const void*>(slot), sizeof(fn));
+        // 这些符号是 STT_NOTYPE，st_value 直接就是函数入口，不是函数指针变量。
+        // 之前多解了一次引用，读出来的是函数第一条指令，才误判成"不可用"。
+        uintptr_t fn = dynSymbol(*unity, name, why);
+        if (!fn) { std::snprintf(b, sizeof b, "%-40s %s\n", name, "未找到"); out += b; continue; }
         Place where = locate(mods, fn);
-        std::snprintf(b, sizeof b, "%-40s %#010zx %#018zx %s\n",
-                      name, size_t(slot), size_t(fn), where.text.c_str());
+        std::snprintf(b, sizeof b, "%-40s %#010zx %s  %s\n",
+                      name, size_t(fn), where.text.c_str(), codeWords(mods, fn, 3).c_str());
         out += b;
         if (where.exec) found++;
     }
@@ -487,5 +488,55 @@ size_t probeUnitySymbols(const std::string& outPath) {
     write(outPath, out);
     return found;
 }
+
+
+// ---------------------------------------------------------------- 蒙皮计数
+namespace {
+std::atomic<uint64_t> g_skinCalls{0};
+using SkinFn = void (*)(void*, void*, void*, void*, void*, void*, void*, void*);
+SkinFn g_orig[6] = {nullptr};
+int g_hooked = 0;
+
+template <int N>
+void skinTrampoline(void* a, void* b, void* c, void* d, void* e, void* f, void* g, void* h) {
+    g_skinCalls.fetch_add(1, std::memory_order_relaxed);
+    if (g_orig[N]) g_orig[N](a, b, c, d, e, f, g, h);
+}
+void (*const g_thunks[6])(void*, void*, void*, void*, void*, void*, void*, void*) = {
+    &skinTrampoline<0>, &skinTrampoline<1>, &skinTrampoline<2>,
+    &skinTrampoline<3>, &skinTrampoline<4>, &skinTrampoline<5>,
+};
+}  // namespace
+
+size_t hookSkinning() {
+    static const char* const kFns[] = {
+        "_s_SkinVertices_NEON",
+        "_s_SkinVertices4Bones_NEON",
+        "_s_SkinVertices2Bones_NEON",
+        "_s_TransformVertices_Strided_XYZN_0_NEON",
+        "_s_TransformVertices_Strided_XYZ_0_NEON",
+        "_MultiplyMatrices4x4_NEON",
+    };
+    std::vector<Mod> mods;
+    dl_iterate_phdr(collect, &mods);
+    const Mod* unity = nullptr;
+    for (const auto& m : mods) if (m.name == "libunity.so") unity = &m;
+    if (!unity) return 0;
+    g_hooked = 0;
+    for (size_t i = 0; i < sizeof(kFns) / sizeof(kFns[0]); i++) {
+        std::string why;
+        uintptr_t fn = dynSymbol(*unity, kFns[i], why);
+        if (!fn) continue;
+        void* orig = nullptr;
+        if (DobbyHook(reinterpret_cast<void*>(fn), reinterpret_cast<dobby_dummy_func_t>(g_thunks[i]),
+                      reinterpret_cast<dobby_dummy_func_t*>(&orig)) == 0 && orig) {
+            g_orig[i] = reinterpret_cast<SkinFn>(orig);
+            g_hooked++;
+        }
+    }
+    return size_t(g_hooked);
+}
+
+uint64_t skinCallCount() { return g_skinCalls.load(std::memory_order_relaxed); }
 
 }  // namespace ms::probe

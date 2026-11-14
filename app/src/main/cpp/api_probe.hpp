@@ -23,4 +23,9 @@ size_t memScanMetadata(const std::string& outPath);
 // 它们是"函数指针变量"，取到值就是 Unity 顶点处理/蒙皮的真实入口。
 // 这条路不需要 il2cpp metadata，是绕开数据加密的备选方案。只读，不挂钩。
 size_t probeUnitySymbols(const std::string& outPath);
+
+// 给蒙皮函数挂钩子，只计数、不改参数、原样转发。用来判断游戏走的是 CPU 蒙皮还是 GPU 蒙皮。
+// 返回成功挂上的个数。游戏如果因为签名不对崩掉，说明这批函数不是这个调用约定，回退即可。
+size_t hookSkinning();
+uint64_t skinCallCount();
 }
