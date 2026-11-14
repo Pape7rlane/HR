@@ -28,6 +28,9 @@ GlMapBuffer g_mapOrig = nullptr;
 GlUnmapBuffer g_unmapOrig = nullptr;
 // 渲染线程单线程用，普通静态变量足够
 uint32_t g_mapTarget = 0;
+std::atomic<bool> g_patched{false};      // 实验：只改一次
+std::atomic<uint64_t> g_patchHits{0};
+constexpr int64_t kProbeSize = 25800;    // 647_25800.bin 的字节数
 void* g_mapPtr = nullptr;
 int64_t g_mapLen = 0;
 GlVertexAttribPointer g_attribOrig = nullptr;
@@ -101,6 +104,13 @@ void* onMapBuffer(uint32_t target, uint32_t access) {
 uint8_t onUnmapBuffer(uint32_t target) {
     if (target == kArrayBuffer && g_mapPtr && g_mapLen > 0) {
         record(target, g_mapLen, g_mapPtr);
+        // 写权限验证：把第一个顶点的 x 推开 0.5，只做一次
+        if (g_mapLen == kProbeSize && !g_patched.load(std::memory_order_relaxed)) {
+            g_patched.store(true, std::memory_order_relaxed);
+            g_patchHits.fetch_add(1, std::memory_order_relaxed);
+            float* f = static_cast<float*>(g_mapPtr);
+            f[0] += 0.5f;
+        }
         g_mapPtr = nullptr; g_mapLen = 0;
     }
     return g_unmapOrig ? g_unmapOrig(target) : 1;
@@ -108,6 +118,15 @@ uint8_t onUnmapBuffer(uint32_t target) {
 
 void onBufferData(uint32_t target, int64_t size, const void* data, uint32_t usage) {
     record(target, size, data);
+    if (target == kArrayBuffer && size == kProbeSize && data &&
+        !g_patched.load(std::memory_order_relaxed)) {
+        g_patched.store(true, std::memory_order_relaxed);
+        g_patchHits.fetch_add(1, std::memory_order_relaxed);
+        std::vector<uint8_t> mod(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + size);
+        reinterpret_cast<float*>(mod.data())[0] += 0.5f;
+        if (g_glBufferDataOrig) g_glBufferDataOrig(target, size, mod.data(), usage);
+        return;
+    }
     if (g_glBufferDataOrig) g_glBufferDataOrig(target, size, data, usage);
 }
 
@@ -181,6 +200,8 @@ Stats stats() {
     s.detail = g_detail;
     return s;
 }
+
+uint64_t patchHits() { return g_patchHits.load(std::memory_order_relaxed); }
 
 std::vector<Attrib> attribs() {
     std::lock_guard<std::mutex> l(g_am);

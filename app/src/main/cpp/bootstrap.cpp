@@ -192,8 +192,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
           try{ms::write(sharedDir(pkg)+"/gles-layout.txt",lay);}catch(...){}
         }}
        auto blobs=ms::gles::take();
+       if(!blobs.empty())done+=blobs.size();
+       {auto h=ms::gles::patchHits();
+        if(h>0)bootLog(pkg,"gles-patch","已改写 25800 字节缓冲的首顶点 x+0.5（共 "+std::to_string(h)+" 次）");}
        if(blobs.empty())continue;
-       done+=blobs.size();
        // 存原始字节：步长和偏移得靠统计才能定，文本里 3 个顶点不够。
        for(auto& v:blobs){
          try{ms::write(sharedDir(pkg)+"/gles-raw/"+std::to_string(v.seq)+"_"+std::to_string(v.declared)+".bin",

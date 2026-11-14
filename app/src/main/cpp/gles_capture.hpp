@@ -43,4 +43,7 @@ std::vector<Blob> take();
 // 当前累积的属性声明（最近 64 条，去重）
 std::vector<Attrib> attribs();
 
+// 写权限验证：命中多少次数（0 表示那个尺寸的缓冲没出现）
+uint64_t patchHits();
+
 }  // namespace ms::gles
