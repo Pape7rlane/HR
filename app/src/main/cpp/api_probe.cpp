@@ -114,6 +114,63 @@ std::string buildIdOf(uintptr_t base, const ElfW(Phdr)* ph, size_t n) {
 }
 }  // namespace
 
+// 在指定模块的 .dynsym 里按名字找符号，返回运行时地址；找不到返回 0。
+// 为什么不直接用 dlsym：崩铁的 so 是 android_dlopen_ext 加进它自己的 linker namespace 的，
+// 我们从私有目录 dlopen 进来的这个 so 去 dlsym，NOLOAD 拿不到句柄，RTLD_DEFAULT 也只搜自己那个 namespace。
+// dl_iterate_phdr 给的是进程级的列表，能看见；符号表就在 PT_DYNAMIC 里，自己查一遍最稳。
+uintptr_t dynSymbol(const Mod& m, const char* want) {
+    const ElfW(Dyn)* dyn = nullptr;
+    for (size_t i = 0; i < m.n; i++) {
+        ElfW(Phdr) h;
+        std::memcpy(&h, m.ph + i * sizeof(h), sizeof(h));
+        if (h.p_type == PT_DYNAMIC) dyn = reinterpret_cast<const ElfW(Dyn)*>(m.base + uintptr_t(h.p_vaddr));
+    }
+    if (!dyn) return 0;
+    uintptr_t symtab = 0, strtab = 0, hash = 0, gnuhash = 0;
+    size_t strsz = 0, syment = sizeof(ElfW(Sym));
+    for (const ElfW(Dyn)* d = dyn; d->d_tag != DT_NULL; ++d) {
+        if (d->d_tag == DT_SYMTAB) symtab = d->d_un.d_ptr;
+        else if (d->d_tag == DT_STRTAB) strtab = d->d_un.d_ptr;
+        else if (d->d_tag == DT_STRSZ) strsz = size_t(d->d_un.d_val);
+        else if (d->d_tag == DT_SYMENT) syment = size_t(d->d_un.d_val);
+        else if (d->d_tag == DT_HASH) hash = d->d_un.d_ptr;
+        else if (d->d_tag == 0x6ffffef5) gnuhash = d->d_un.d_ptr;   // DT_GNU_HASH
+    }
+    // bionic 已经把这两个重定位成绝对地址；万一给的是偏移就补上基址。
+    auto fix = [&](uintptr_t p) { return (p && p < m.base) ? m.base + p : p; };
+    symtab = fix(symtab); strtab = fix(strtab); hash = fix(hash); gnuhash = fix(gnuhash);
+    if (!symtab || !strtab || !strsz || syment < sizeof(ElfW(Sym))) return 0;
+
+    size_t count = 0;
+    if (hash) {
+        count = reinterpret_cast<const uint32_t*>(hash)[1];        // DT_HASH：nchain 就是符号总数
+    } else if (gnuhash) {
+        auto* g = reinterpret_cast<const uint32_t*>(gnuhash);
+        uint32_t nbuckets = g[0], symoffset = g[1], bloom = g[2];
+        const uint32_t* buckets = g + 4 + size_t(bloom) * 2;
+        const uint32_t* chains = buckets + nbuckets;
+        uint32_t last = 0;
+        for (uint32_t b = 0; b < nbuckets; b++) if (buckets[b] > last) last = buckets[b];
+        if (last < symoffset) last = symoffset;
+        count = last;
+        while (count < 400000 && (chains[count - symoffset] & 1u) == 0) count++;
+        count++;
+    } else {
+        return 0;
+    }
+    if (count > 400000) count = 400000;
+
+    auto* syms = reinterpret_cast<const ElfW(Sym)*>(symtab);
+    for (size_t i = 0; i < count; i++) {
+        uint32_t nameOff = uint32_t(syms[i].st_name);
+        if (!nameOff || nameOff >= strsz || !syms[i].st_value) continue;
+        const char* n = reinterpret_cast<const char*>(strtab + nameOff);
+        if (std::strcmp(n, want) == 0) return m.base + uintptr_t(syms[i].st_value);
+    }
+    return 0;
+}
+}  // namespace
+
 namespace ms::probe {
 
 void apiTable(const std::string& path) {
@@ -126,7 +183,11 @@ void apiTable(const std::string& path) {
     // 三种拿法依次试：按 soname、按 dl_iterate_phdr 看到的完整路径、全局符号表。
     // 崩铁是 android_dlopen_ext 加载的，linker namespace 跟我们的 so 不一定是同一个，
     // 按 soname 可能命中不了，完整路径最可靠。
+    // 先自己查符号表（绕开 linker namespace），再退回 dlsym 三条老路。
     TableFn getTable = nullptr;
+    uintptr_t bySymbol = 0;
+    for (const auto& m : mods) if (m.name == "libil2cpp.so") { bySymbol = dynSymbol(m, "il2cpp_get_api_table"); if (bySymbol) break; }
+    if (bySymbol) getTable = reinterpret_cast<TableFn>(bySymbol);
     auto tryHandle = [&](void* h) {
         if (h && !getTable) getTable = reinterpret_cast<TableFn>(dlsym(h, "il2cpp_get_api_table"));
     };
