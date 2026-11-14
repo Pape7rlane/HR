@@ -401,10 +401,10 @@ size_t memScanMetadata(const std::string& outPath) {
         anonRegions++;
         auto* p = reinterpret_cast<const uint8_t*>(r.start);
         const size_t len = size_t(r.end - r.start);
-        totalBytes += size_t(stop - p);
         if (r.path.size() < 120) { /* 记下候选，便于下一次核对 */ }
         const uint8_t* at = p;
         const uint8_t* stop = p + (len > kScanCap ? kScanCap : len);
+        totalBytes += size_t(stop - p);
         while (at + 4 <= stop) {
             const void* hit = memmem(at, size_t(stop - at), kMagic, 4);
             if (!hit) break;
