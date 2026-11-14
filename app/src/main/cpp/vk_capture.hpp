@@ -74,16 +74,20 @@ inline std::vector<Hash> ibHashes(const uint8_t* p,size_t n){std::vector<Hash> o
 
 // One index upload: where it came from, its hashes and enough of its content to compare by hand.
 struct Blob {uint64_t seq=0,buffer=0,offset=0;uint32_t bytes=0;std::string via;std::vector<Hash> hashes;std::vector<uint16_t> head16;uint32_t max16=0,max32=0;};
+// Vertex buffer data kept verbatim (the point is to read it, not to hash it).
+struct VertexBlob {uint64_t seq=0,buffer=0,offset=0;uint32_t bytes=0;std::string via;std::vector<uint8_t> data;};
 struct Stats {uint64_t uploads=0,bytes=0,copies=0,mappedBinds=0,notMapped=0,outOfRange=0,tooLarge=0,dropped=0,resolved=0,wrapped=0;bool installed=false;std::string error;};
 struct Copy {uint64_t srcOffset=0,dstOffset=0,size=0;};   // VkBufferCopy
 
 // The buffers, memory bindings and host mappings needed to find index data in CPU memory: a staging buffer copied
 // into an index buffer (read when the copy is recorded), or an index buffer in mapped memory (read at its first bind).
 class Tracker {
- struct Buffer {uint64_t size=0,memory=0,memoryOffset=0;uint32_t usage=0;bool bound=false,captured=false;};
+ struct Buffer {uint64_t size=0,memory=0,memoryOffset=0;uint32_t usage=0;bool bound=false,captured=false,isVertex=false;};
  struct Mapping {const uint8_t* base=nullptr;uint64_t offset=0,size=0;};
- std::mutex m;std::unordered_map<uint64_t,Buffer> buffers;std::unordered_map<uint64_t,Mapping> maps;std::vector<Blob> out;Stats st;uint64_t seq=0;
- static constexpr uint32_t indexUsage=0x40,transferSrc=0x1;static constexpr size_t maxBlob=64u<<20,maxQueue=65536;
+ std::mutex m;std::unordered_map<uint64_t,Buffer> buffers;std::unordered_map<uint64_t,Mapping> maps;std::vector<Blob> out;std::vector<VertexBlob> vertexOut;Stats st;uint64_t seq=0;
+ static constexpr uint32_t indexUsage=0x40,vertexUsage=0x80,transferSrc=0x1;
+ static constexpr size_t maxBlob=64u<<20,maxQueue=65536;
+ static constexpr size_t maxVertexBlob=512u*1024,maxVertexQueue=48;
  // Host address of [memory offset, +size) or null when that range is not mapped.
  const uint8_t* host(const Buffer& b,uint64_t at,uint64_t size){auto x=maps.find(b.memory);if(x==maps.end()||!x->second.base)return nullptr;uint64_t from=b.memoryOffset+at;
   if(from<x->second.offset||(x->second.size!=~0ull&&from+size>x->second.offset+x->second.size)){return nullptr;}return x->second.base+(from-x->second.offset);}
@@ -96,18 +100,35 @@ class Tracker {
 public:
  std::atomic<bool> enabled{false};
  std::atomic<bool> allForms{true};   // false (match / collect): the data as uploaded only, one pass over it
- void created(uint64_t buffer,uint64_t size,uint32_t usage){if(!(usage&(indexUsage|transferSrc)))return;std::lock_guard<std::mutex> l(m);Buffer b;b.size=size;b.usage=usage;buffers[buffer]=b;}
+ void created(uint64_t buffer,uint64_t size,uint32_t usage){if(!(usage&(indexUsage|vertexUsage|transferSrc)))return;std::lock_guard<std::mutex> l(m);Buffer b;b.size=size;b.usage=usage;b.isVertex=(usage&vertexUsage)!=0;buffers[buffer]=std::move(b);}
  void destroyed(uint64_t buffer){std::lock_guard<std::mutex> l(m);buffers.erase(buffer);}
  void bound(uint64_t buffer,uint64_t memory,uint64_t offset){std::lock_guard<std::mutex> l(m);auto b=buffers.find(buffer);if(b==buffers.end())return;b->second.memory=memory;b->second.memoryOffset=offset;b->second.bound=true;}
  void mapped(uint64_t memory,uint64_t offset,uint64_t size,const void* p){std::lock_guard<std::mutex> l(m);maps[memory]={static_cast<const uint8_t*>(p),offset,size};}
  void unmapped(uint64_t memory){std::lock_guard<std::mutex> l(m);maps.erase(memory);}
  // A copy into an index buffer: each region's source bytes, as written into the staging memory before the copy.
  void copied(uint64_t src,uint64_t dst,const Copy* regions,uint32_t count){
-  std::lock_guard<std::mutex> l(m);auto d=buffers.find(dst);if(d==buffers.end()||!(d->second.usage&indexUsage))return;d->second.captured=true;auto s=buffers.find(src);
+  std::lock_guard<std::mutex> l(m);auto d=buffers.find(dst);
+  if(d==buffers.end()||!(d->second.usage&(indexUsage|vertexUsage)))return;
+  d->second.captured=true;auto s=buffers.find(src);
    for(uint32_t i=0;i<count;i++){const Copy& r=regions[i];st.copies++;
     if(s==buffers.end()||!s->second.bound){st.notMapped++;continue;}if(r.size>maxBlob){st.tooLarge++;continue;}
     if(r.srcOffset+r.size>s->second.size||r.dstOffset+r.size>d->second.size){st.outOfRange++;continue;}
-    const uint8_t* p=host(s->second,r.srcOffset,r.size);if(!p){st.notMapped++;continue;}add(p,r.size,dst,r.dstOffset,"staging copy");}}
+    const uint8_t* p=host(s->second,r.srcOffset,r.size);if(!p){st.notMapped++;continue;}
+    if(d->second.isVertex)vertexAdd(p,r.size,dst,r.dstOffset,"staging copy");else add(p,r.size,dst,r.dstOffset,"staging copy");}}
+ // Under the lock: keep the first slice of a vertex buffer's bytes.
+ void vertexAdd(const uint8_t* p,uint64_t n,uint64_t buffer,uint64_t offset,const char* via){
+  if(vertexOut.size()>=maxVertexQueue)return;
+  size_t take=size_t(n>maxVertexBlob?maxVertexBlob:n);
+  VertexBlob b;b.seq=++seq;b.buffer=buffer;b.offset=offset;b.bytes=uint32_t(take);b.via=via;
+  b.data.assign(p,p+take);vertexOut.push_back(std::move(b));}
+ // A vertex buffer bound for drawing that no copy filled: try its mapped memory, once.
+ void vertexBound(uint64_t buffer,uint64_t offset){
+  std::lock_guard<std::mutex> l(m);auto b=buffers.find(buffer);
+  if(b==buffers.end()||b->second.captured||!b->second.bound||!(b->second.usage&vertexUsage))return;
+  b->second.captured=true;if(offset>=b->second.size)return;
+  uint64_t n=b->second.size-offset;if(n>maxVertexBlob)n=maxVertexBlob;
+  const uint8_t* p=host(b->second,offset,n);if(!p){st.notMapped++;return;}st.mappedBinds++;
+  vertexAdd(p,n,buffer,offset,"mapped memory at its first vertex bind");}
  // An index buffer bound for drawing that no copy filled: read from its mapped memory once, offset to its end.
  void indexBound(uint64_t buffer,uint64_t offset){
   std::lock_guard<std::mutex> l(m);auto b=buffers.find(buffer);if(b==buffers.end()||b->second.captured||!b->second.bound||!(b->second.usage&indexUsage)||offset>=b->second.size)return;b->second.captured=true;
@@ -116,6 +137,7 @@ public:
  void resolvedName(bool wrapped){std::lock_guard<std::mutex> l(m);st.resolved++;if(wrapped)st.wrapped++;}
  void installed(bool ok,const std::string& error){std::lock_guard<std::mutex> l(m);st.installed=ok;st.error=error;enabled=ok;}
  std::vector<Blob> take(){std::lock_guard<std::mutex> l(m);std::vector<Blob> r;r.swap(out);return r;}
+ std::vector<VertexBlob> takeVertex(){std::lock_guard<std::mutex> l(m);std::vector<VertexBlob> r;r.swap(vertexOut);return r;}
  Stats stats(){std::lock_guard<std::mutex> l(m);return st;}
 };
 inline Tracker& tracker(){static Tracker t;return t;}
