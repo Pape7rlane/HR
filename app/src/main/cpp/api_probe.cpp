@@ -2,6 +2,8 @@
 #include "core.hpp"
 #include "logfmt.hpp"
 #include <chrono>
+#include <csignal>
+#include <csetjmp>
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
@@ -179,6 +181,15 @@ uintptr_t dynSymbol(const Mod& m, const char* want, std::string& why) {
 
 namespace ms::probe {
 
+// 调用游戏函数可能直接 SIGSEGV（反调试壳、或者地址就是错的）。用 sigsetjmp 兜一下：
+// 崩了就回到调用点，把"崩在哪一步"落盘，进程继续活着。
+static sigjmp_buf g_callGuard;
+static void onCallSignal(int) { siglongjmp(g_callGuard, 1); }
+
+// 已有版本的入口字节，用来确认 base + RVA 落到了正确的函数上。
+// tools/scan_game.py 从 APK 里读出来的 0x6dcdc4c 处是 17 ff 8f f2（一条 B）。
+static constexpr uint32_t kApiTableEntryWord = 0xf28fff17u;
+
 // 已知版本的关键符号 RVA。这些值是 tools/scan_game.py 从 APK 里算出来的，
 // 跟运行时 dl_iterate_phdr 拿到的 Build ID 核对后才用——对不上就不碰。
 // 走这条比查符号表直接，符号表那条留着兜未来版本。
@@ -249,7 +260,49 @@ void apiTable(const std::string& path) {
                   codeWords(mods, reinterpret_cast<uintptr_t>(getTable), 6).c_str());
     out += line;
 
-    void* table = getTable();
+    // ---- 调用前先落盘：万一崩溃，至少知道走到哪一步了
+    write(path, out);
+    const uintptr_t fnAddr = reinterpret_cast<uintptr_t>(getTable);
+    {
+        char b[256];
+        std::snprintf(b, sizeof b, "\n入口 %#zx，前 8 条指令：", size_t(fnAddr));
+        out += b;
+        for (int i = 0; i < 8; i++) {
+            uint32_t w = 0;
+            std::memcpy(&w, reinterpret_cast<const void*>(fnAddr + uintptr_t(i) * 4), sizeof(w));
+            std::snprintf(b, sizeof b, " %08x", w);
+            out += b;
+        }
+        out += "\n";
+        write(path, out);
+    }
+    {
+        uint32_t first = 0;
+        std::memcpy(&first, reinterpret_cast<const void*>(fnAddr), sizeof(first));
+        char b[200];
+        std::snprintf(b, sizeof b, "入口首字 %08x，%s\n", first,
+                      first == kApiTableEntryWord ? "与录制的一致，地址是对的" : "与录制的不一致，地址可能算错");
+        out += b;
+        write(path, out);
+        if (first != kApiTableEntryWord) {
+            throw std::runtime_error(std::string("入口字节不符（") + (how.empty() ? "未知来源" : how) +
+                                     "）：读到 " + std::to_string(first) + "，不是预期的入口，未调用");
+        }
+    }
+
+    void* table = nullptr;
+    {
+        auto old = ::signal(SIGSEGV, onCallSignal);
+        if (sigsetjmp(g_callGuard, 1) == 0) {
+            table = getTable();
+            ::signal(SIGSEGV, old);
+        } else {
+            ::signal(SIGSEGV, old);
+            out += "\n调用 il2cpp_get_api_table() 时收到 SIGSEGV —— 入口字节是对的，但函数本身不能这样直接调。\n";
+            write(path, out);
+            throw std::runtime_error("调用 il2cpp_get_api_table 触发 SIGSEGV（入口字节正确，函数拒绝对外直接调用）");
+        }
+    }
     if (!table) {
         out += "\n返回了空指针——这张表要么由别的地方填，要么这条路走不通。\n";
         write(path, out);
