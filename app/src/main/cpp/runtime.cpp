@@ -272,7 +272,7 @@ struct Runtime::Impl {
  Worker worker;  // last member: destroyed (joined) first, while everything it touches still exists
 
  Impl(Engine x,std::string p,std::string d,std::string media,bool threaded):e(std::move(x)),pkg(std::move(p)),priv(std::move(d)),worker(threaded){
-  require(pkg=="com.miHoYo.hkrpg"||pkg=="com.miHoYo.hkrpg.bilibili"||pkg=="com.HoYoverse.hkrpgoversea","不支持的包名");shared=media+"/"+pkg+"/HSRBox";modelRoot=shared+"/models";boneRoot=shared+"/skeletons";
+  require(pkg=="com.miHoYo.hkrpg"||pkg=="com.miHoYo.hkrpg.bilibili"||pkg=="com.HoYoverse.hkrpgoversea"||pkg=="com.HoYoverse.hkrpgoverseacbtest"||pkg=="com.HoYoverse.hkrpgoverseacbtest","不支持的包名");shared=media+"/"+pkg+"/HSRBox";modelRoot=shared+"/models";boneRoot=shared+"/skeletons";
   for(auto& s:{priv,shared,modelRoot,boneRoot})std::filesystem::create_directories(s);
   logLevel.store(logThresholdOf(shared));
   // A completed request is acknowledged across game restarts; an uncompleted request in control.json is replayed.

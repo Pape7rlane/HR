@@ -11,7 +11,7 @@ import org.json.JSONObject;
 
 public final class Control {
     private Control() {}
-    public static boolean supported(String pkg) { return "com.miHoYo.hkrpg".equals(pkg) || "com.miHoYo.hkrpg.bilibili".equals(pkg) || "com.HoYoverse.hkrpgoversea".equals(pkg); }
+    public static boolean supported(String pkg) { return "com.miHoYo.hkrpg".equals(pkg) || "com.miHoYo.hkrpg.bilibili".equals(pkg) || "com.HoYoverse.hkrpgoversea".equals(pkg) || "com.HoYoverse.hkrpgoverseacbtest".equals(pkg); }
     /**
      * Everything the game reads or writes: the game's own media folder, since the game process cannot open HSRBox's
      * private storage. models/ (converted models), skeletons/ (skeleton library), control.json, status.json, the log.
@@ -25,7 +25,7 @@ public final class Control {
     /** Before 0.7.101: one Mods folder per game (filesDir/mods/<pkg>), merged into mods() at the app's start. */
     public static File legacyMods(File filesDir, String pkg) { return new File(new File(filesDir, "mods"), pkg); }
     /** The games HSRBox supports, official first. */
-    public static final String[] GAMES = {"com.miHoYo.hkrpg", "com.miHoYo.hkrpg.bilibili", "com.HoYoverse.hkrpgoversea"};
+    public static final String[] GAMES = {"com.miHoYo.hkrpg", "com.miHoYo.hkrpg.bilibili", "com.HoYoverse.hkrpgoversea", "com.HoYoverse.hkrpgoverseacbtest"};
     public static JSONObject load(String pkg) {
         try { return new JSONObject(new String(Files.readAllBytes(new File(shared(pkg), "control.json").toPath()), StandardCharsets.UTF_8)); }
         catch (Exception e) { JSONObject j = new JSONObject(); try { j.put("enabled", false); j.put("selected", new JSONArray()); j.put("exportBones", 0); j.put("logLevel", "info"); } catch (Exception ignored) {} return j; }

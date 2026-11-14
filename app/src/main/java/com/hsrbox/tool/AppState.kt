@@ -243,7 +243,7 @@ class AppState(private val activity: Activity) {
      * there), else the official one.
      */
     private fun detectGame(): String {
-        val all = listOf("com.miHoYo.hkrpg", "com.miHoYo.hkrpg.bilibili", "com.HoYoverse.hkrpgoversea")
+        val all = listOf("com.miHoYo.hkrpg", "com.miHoYo.hkrpg.bilibili", "com.HoYoverse.hkrpgoversea", "com.HoYoverse.hkrpgoverseacbtest")
         val installed = all.filter { packageInfo(it) != null }.ifEmpty { all }
         val scope = LspService.scope
         val candidates = (if (scope == null) installed else installed.filter { it in scope }).ifEmpty { installed }
@@ -705,4 +705,4 @@ fun who(mod: Importer.Mod): String = when {
     mod.converted -> "按名字识别"
     else -> "未选择角色"
 }
-fun serverName(pkg: String): String = when (pkg) { "com.miHoYo.hkrpg" -> "官服"; "com.HoYoverse.hkrpgoversea" -> "国际服"; else -> "B 服" }
+fun serverName(pkg: String): String = when (pkg) { "com.miHoYo.hkrpg" -> "官服"; "com.HoYoverse.hkrpgoverseacbtest" -> "国际服测试服"; "com.HoYoverse.hkrpgoversea" -> "国际服"; else -> "B 服" }

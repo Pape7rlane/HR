@@ -101,7 +101,7 @@ void bootLog(const std::string& pkg,const std::string& state,const std::string& 
 void bootStatus(const std::string& pkg,const std::string& state,const std::string& detail){auto dir=sharedDir(pkg);try{std::filesystem::create_directories(dir);auto s="{\"state\":"+ms::quote(state)+",\"detail\":"+ms::quote(detail)+",\"characterId\":0,\"model\":\"\"}";ms::write(dir+"/status.json.tmp",s);std::filesystem::rename(dir+"/status.json.tmp",dir+"/status.json");}catch(const std::exception&){}bootLog(pkg,state,detail);}
 }
 extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv* env,jclass,jstring jp,jstring jd){try{
- auto pkg=jstringValue(env,jp),priv=jstringValue(env,jd);ms::require(pkg=="com.miHoYo.hkrpg"||pkg=="com.miHoYo.hkrpg.bilibili"||pkg=="com.HoYoverse.hkrpgoversea","不支持的包名");if(started.exchange(true))return;
+ auto pkg=jstringValue(env,jp),priv=jstringValue(env,jd);ms::require(pkg=="com.miHoYo.hkrpg"||pkg=="com.miHoYo.hkrpg.bilibili"||pkg=="com.HoYoverse.hkrpgoversea"||pkg=="com.HoYoverse.hkrpgoverseacbtest"||pkg=="com.HoYoverse.hkrpgoverseacbtest","不支持的包名");if(started.exchange(true))return;
  // The index-buffer hashes (vk_capture.hpp) hook the Vulkan loader now, before the game makes its device; only when
  // control.json textureMods.hashMode (or the older ibHash / capture switches) is on at this start (a change takes a restart).
  {auto mode=ms::vkcap::Mode::Off;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();const auto& t=c.at("textureMods");

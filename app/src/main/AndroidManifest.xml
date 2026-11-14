@@ -8,6 +8,7 @@
         <package android:name="com.miHoYo.hkrpg"/>
         <package android:name="com.miHoYo.hkrpg.bilibili"/>
         <package android:name="com.HoYoverse.hkrpgoversea"/>
+        <package android:name="com.HoYoverse.hkrpgoverseacbtest"/>
         <intent><action android:name="android.intent.action.VIEW"/><data android:mimeType="text/plain"/></intent>
         <intent><action android:name="android.intent.action.SEND"/><data android:mimeType="text/plain"/></intent>
         <!-- 打开文件夹: the same chooser as the log's share button, for the folder MIME types file managers register. -->
