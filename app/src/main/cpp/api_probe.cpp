@@ -380,10 +380,16 @@ size_t memScanMetadata(const std::string& outPath) {
         ranges.push_back({a, b, anon});
     }
 
-    size_t totalBytes = 0, anonRegions = 0;
+    // 从读 maps 到真正访问之间，这些区域可能已经被释放；踩上去就是 SIGSEGV，而这里没有 apiTable 那层保护。
+    // 逐区域装保护，崩了只跳过这一个区域，不要带走整个进程。
+    auto old = ::signal(SIGSEGV, onGuardSignal);
+    size_t totalBytes = 0, anonRegions = 0, crashed = 0;
     static constexpr uint8_t kMagic[4] = {0xaf, 0x1b, 0xb1, 0xfa};
     for (const auto& r : ranges) {
         if (!r.anon) continue;
+        if (size_t(r.end - r.start) < 1024 * 1024) continue;   // 小于 1 MB 的跳过：metadata 一百多 MB，不必去碰碎片
+        if (sigsetjmp(g_guard, 1) != 0) { g_armed = 0; crashed++; continue; }
+        g_armed = 1;
         anonRegions++;
         auto* p = reinterpret_cast<const uint8_t*>(r.start);
         const size_t len = size_t(r.end - r.start);
@@ -401,15 +407,20 @@ size_t memScanMetadata(const std::string& outPath) {
                     const size_t dumpLen = size_t(stop - h);
                     std::ofstream f(outPath, std::ios::binary | std::ios::trunc);
                     if (f) { f.write(reinterpret_cast<const char*>(h), std::streamsize(dumpLen)); f.flush(); }
+                    g_armed = 0;
+                    ::signal(SIGSEGV, old);
                     return f ? dumpLen : 0;
                 }
             }
             at = h + 4;
         }
     }
+    g_armed = 0;
+    ::signal(SIGSEGV, old);
     throw std::runtime_error("内存里没找到明文 metadata（共 " + std::to_string(ranges.size()) +
                              " 个可读区域，其中匿名 " + std::to_string(anonRegions) + " 个，扫了 " +
-                             std::to_string(totalBytes / 1024 / 1024) + " MB，跳过 " +
+                             std::to_string(totalBytes / 1024 / 1024) + " MB，读崩 " +
+                             std::to_string(crashed) + " 个区域，跳过 " +
                              std::to_string(skipped) + " 个超大区域）");
 }
 
