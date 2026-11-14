@@ -20,12 +20,20 @@ jobs:
         with:
           gradle-version: '9.7.1'
       # compileSdk 37.1 and build-tools are downloaded by AGP (licenses accepted by setup-android).
-      - run: sdkmanager 'ndk;27.2.12479018' 'cmake;3.22.1'
-      - run: python3 tools/check_source.py
+      - name: NDK and cmake
+        run: |
+          set -o pipefail
+          sdkmanager 'ndk;27.2.12479018' 'cmake;3.22.1' 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
+      - name: Source audit
+        run: |
+          set -o pipefail
+          python3 tools/check_source.py 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
       # 宿主测试从原神那边带过来，部分断言还没跟进崩铁：失败只警告，不挡 APK。
       - name: Host tests (best-effort in this port)
         continue-on-error: true
-        run: python3 tools/test_host.py
+        run: |
+          set -o pipefail
+          python3 tools/test_host.py 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
       - name: Decode signing keystore
         id: keystore
         env:
@@ -45,10 +53,14 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle --no-daemon :app:assembleRelease
+        run: |
+          set -o pipefail
+          gradle --no-daemon :app:assembleRelease --stacktrace 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
       - name: Build debug APK (no signing secrets)
         if: steps.keystore.outputs.signed != 'true'
-        run: gradle --no-daemon :app:assembleDebug
+        run: |
+          set -o pipefail
+          gradle --no-daemon :app:assembleDebug --stacktrace 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
       - name: Remove keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
@@ -79,3 +91,15 @@ jobs:
           out="$RUNNER_TEMP/HSRBox-${tag#v}.apk"
           cp "$APK_PATH" "$out"
           gh release create "$tag" "$out" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "HSRBox ${tag#v}" --notes-file .github/release-notes.md
+
+      # 构建失败时把日志推回 ci-log 分支：Actions 的日志要登录才看得到，这个分支匿名可读。
+      - name: Publish failure log
+        if: failure()
+        run: |
+          tail -c 40000 "$RUNNER_TEMP/ci.log" > ci-failure.log 2>/dev/null || echo "no log captured" > ci-failure.log
+          git config user.name "ci"
+          git config user.email "ci@local"
+          git checkout -B ci-log
+          git add -f ci-failure.log
+          git commit -m "ci failure log for $GITHUB_RUN_ID" || true
+          git push -f origin ci-log
