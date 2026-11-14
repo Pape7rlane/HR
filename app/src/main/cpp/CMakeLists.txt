@@ -15,7 +15,7 @@ FetchContent_Declare(dobby_source
 FetchContent_MakeAvailable(dobby_source)
 # 一个游戏版本一份地址表的开关：OFF 时 offsets.hpp 里 profiles() 是空的，模块进 offsets-pending。
 option(HSRBOX_GENERATED_OFFSETS "用 tools/scan_game.py 生成的地址表编译" OFF)
-add_library(hsrbox SHARED runtime.cpp bootstrap.cpp dds.cpp vk_hook.cpp api_probe.cpp)
+add_library(hsrbox SHARED runtime.cpp bootstrap.cpp dds.cpp vk_hook.cpp api_probe.cpp gles_capture.cpp)
 if(HSRBOX_GENERATED_OFFSETS)
   if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated_offsets.inc")
     message(FATAL_ERROR "开了 HSRBOX_GENERATED_OFFSETS 但没有 generated_offsets.inc；先跑 tools/scan_game.py --map ... --emit app/src/main/cpp/generated_offsets.inc")

@@ -13,6 +13,7 @@
 #include "dobby.h"
 #include "vk_capture.hpp"
 #include "api_probe.hpp"
+#include "gles_capture.hpp"
 #include "uid_hide.hpp"
 
 namespace {
@@ -160,6 +161,46 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
   }}
  std::thread([pkg,priv]{try{bootStatus(pkg,"waiting","等待游戏引擎库（libil2cpp.so / libunity.so）");Image image;for(unsigned n=0;n<480&&!image.base;n++){dl_iterate_phdr(findImage,&image);if(!image.base)std::this_thread::sleep_for(std::chrono::milliseconds(500));}ms::require(image.base!=0,"等待游戏引擎库加载超时（libil2cpp.so / libunity.so）");
  bootLog(pkg,"engine-lib","引擎库："+image.name);
+ // GLES 顶点缓冲捕获：Vulkan 那条已证实不走（50 秒 0 个 buffer），渲染走 GLESv3。
+ // glBufferData 在 libGLESv2.so 里是导出的，可以直接挂钩。
+ {bool want=true;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("glesCapture");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
+  if(want){
+   std::thread([pkg]{
+     if(!ms::gles::install()){bootLog(pkg,"gles-capture-failed",ms::gles::stats().detail);return;}
+     bootLog(pkg,"gles-capture","已挂钩 "+ms::gles::stats().detail);
+     for(int i=0;i<30;i++){
+       std::this_thread::sleep_for(std::chrono::seconds(5));
+       auto st=ms::gles::stats();
+       bootLog(pkg,"gles-stats","第 "+std::to_string(i*5+5)+" 秒：顶点上传 "+std::to_string(st.arrayUploads)+
+               " 次，索引 "+std::to_string(st.indexUploads)+" 次，共 "+std::to_string(st.totalBytes/1024)+" KB");
+       auto blobs=ms::gles::take();
+       if(blobs.empty())continue;
+       std::string out="# HSRBox —— GLES 顶点缓冲\n";
+       char b[256];
+       for(auto& v:blobs){
+         std::snprintf(b,sizeof b,"\nseq=%llu 声明大小=%llu 留存=%u\n",(unsigned long long)v.seq,(unsigned long long)v.declared,v.bytes);
+         out+=b;
+         size_t strides[3]={24,32,20};
+         for(size_t st:strides){
+           std::snprintf(b,sizeof b,"  stride %zu:\n",st);out+=b;
+           for(int k=0;k<3;k++){
+             size_t off=size_t(k)*st;
+             if(off+24>v.data.size())break;
+             float f0,f1,f2,f3,f4,f5;
+             std::memcpy(&f0,v.data.data()+off,4);std::memcpy(&f1,v.data.data()+off+4,4);std::memcpy(&f2,v.data.data()+off+8,4);
+             std::memcpy(&f3,v.data.data()+off+12,4);std::memcpy(&f4,v.data.data()+off+16,4);std::memcpy(&f5,v.data.data()+off+20,4);
+             std::snprintf(b,sizeof b,"    v%d: %9.4f %9.4f %9.4f | %9.4f %9.4f %9.4f\n",k,(double)f0,(double)f1,(double)f2,(double)f3,(double)f4,(double)f5);
+             out+=b;
+           }
+         }
+       }
+       try{ms::write(sharedDir(pkg)+"/gles-vertex.txt",out);}catch(...){}
+       bootLog(pkg,"gles-capture-done","已写出 gles-vertex.txt，"+std::to_string(blobs.size())+" 个缓冲");
+       return;
+     }
+   }).detach();
+  }}
+
  // 记录进程实际用了哪套图形 API：libvulkan 还是 libGLESv2/v3。走 GLES 的话 Vulkan 钩子一辈子都不会响。
  {struct G {std::string text;int n=0;};
   static G g;
