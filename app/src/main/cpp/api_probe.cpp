@@ -503,7 +503,7 @@ int g_hooked = 0;
 template <int N>
 void skinTrampoline(void* a, void* b, void* c, void* d, void* e, void* f, void* g, void* h) {
     g_skinCalls.fetch_add(1, std::memory_order_relaxed);
-    if (N == 1 && g_captureWanted.load(std::memory_order_relaxed) && !g_captureDone.load(std::memory_order_relaxed)) {
+    if (g_captureWanted.load(std::memory_order_relaxed) && !g_captureDone.load(std::memory_order_relaxed)) {
         // x0 = 骨骼矩阵数组, x1 = 顶点流游标, x2 = 终点, x3 = 骨骼索引
         // 这里只读，不改任何东西
         if (g_captureWanted.exchange(false)) {
@@ -515,7 +515,7 @@ void skinTrampoline(void* a, void* b, void* c, void* d, void* e, void* f, void* 
             std::string out = "# HSRBox —— 蒙皮调用采样（只读）\n";
             char line[256];
             const size_t span = size_t(end - verts);
-            std::snprintf(line, sizeof line, "顶点流跨度 %zu 字节, 骨骼矩阵基址 %p, 索引指针 %p\n\n", span, a, d);
+            std::snprintf(line, sizeof line, "命中函数槽位 #%d, 顶点流跨度 %zu 字节, 骨骼矩阵基址 %p, 索引指针 %p\n\n", N, span, a, d);
             out += line;
             // 顶点流按 24 字节步长看（从反汇编推断：16 + 8）
             const size_t strides[3] = {24, 32, 20};
