@@ -90,6 +90,18 @@ int findImage(dl_phdr_info* info,size_t,void* ptr){std::string name=info->dlpi_n
   if(out.base&&out.rank<=int(i))return 0;               // 更靠前的候选已经收下
   out={info->dlpi_addr,info->dlpi_phdr,info->dlpi_phnum,name,int(i)};return 1;}
  return 0;}
+// 诊断：进程里到底加载了哪些模块。找不到 libil2cpp.so 时用它一次看清。
+struct ModuleList{std::string text;size_t n=0;};
+int collectModule(dl_phdr_info* info,size_t,void* p){
+ auto& out=*static_cast<ModuleList*>(p);
+ std::string n=info->dlpi_name?info->dlpi_name:"";
+ auto s=n.find_last_of('/');std::string base=s==std::string::npos?n:n.substr(s+1);
+ if(base.empty()||base[0]!='l'||base.compare(0,3,"lib"))return 0;   // 只要 lib*.so
+ if(++out.n>80)return 1;
+ out.text+=(out.text.empty()?"":" ")+base;
+ return 0;}
+void dumpModules(const std::string& pkg){ModuleList l;dl_iterate_phdr(collectModule,&l);
+ bootLog(pkg,"modules","已加载 "+std::to_string(l.n)+" 个 lib*.so："+l.text);}
 int findManaged(dl_phdr_info* info,size_t,void* ptr){std::string name=info->dlpi_name?info->dlpi_name:"";auto p=name.find_last_of('/');name=name.substr(p==name.npos?0:p+1);
  if(name!="libil2cpp.so")return 0;auto& out=*static_cast<Image*>(ptr);out={info->dlpi_addr,info->dlpi_phdr,info->dlpi_phnum,name,0};return 1;}
 std::string jstringValue(JNIEnv* env,jstring s){ms::require(s!=nullptr,"Java 字符串为空");const char* p=env->GetStringUTFChars(s,nullptr);ms::require(p!=nullptr,"无法解码 Java 字符串");std::string out=p;env->ReleaseStringUTFChars(s,p);return out;}
@@ -112,17 +124,20 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  std::thread([pkg,priv]{try{bootStatus(pkg,"waiting","等待游戏引擎库（libil2cpp.so / libunity.so）");Image image;for(unsigned n=0;n<480&&!image.base;n++){dl_iterate_phdr(findImage,&image);if(!image.base)std::this_thread::sleep_for(std::chrono::milliseconds(500));}ms::require(image.base!=0,"等待游戏引擎库加载超时（libil2cpp.so / libunity.so）");
  bootLog(pkg,"engine-lib","引擎库："+image.name);
  // 托管库单独找：崩铁的 il2cpp 侧偏移（objectNew / arrayNew / typeObject …）都在 libil2cpp.so 里。
- Image managed;dl_iterate_phdr(findManaged,&managed);
+ // Unity 先加载 libunity.so，il2cpp 要晚一步（实测启动 4 秒时还没进进程），所以这里必须等，不能看一眼就判死刑。
+ Image managed;
+ for(unsigned n=0;n<240&&!managed.base;n++){dl_iterate_phdr(findManaged,&managed);
+  if(!managed.base)std::this_thread::sleep_for(std::chrono::milliseconds(500));}
  std::string managedId;
  if(managed.base){managedId=ms::loadedBuildId(managed.base,managed.ph,managed.count,sizeof(ElfW(Phdr)));
   bootLog(pkg,"managed-lib",managed.name+" Build ID "+managedId);}
- else bootLog(pkg,"managed-lib","没有单独的 libil2cpp.so（单库构造？），两套基址用同一个");
+ else{bootLog(pkg,"managed-lib","等了 120 秒仍没有 libil2cpp.so");dumpModules(pkg);}
  auto actual=ms::loadedBuildId(image.base,image.ph,image.count,sizeof(ElfW(Phdr)));
  if(!ms::abi::select(actual,managedId)){bootStatus(pkg,"buildid-mismatch","实际 Build ID："+actual);return;}
  // il2cpp API 表探测：不依赖地址表，空表也照样出结果。结果落在 api-table.txt，control.json 里 apiProbe:false 可关。
  // 放在待定检查之前——这条探测的意义就是决定后面走原生 RVA 还是托管调用。
  {bool want=true;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("apiProbe");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
-  if(want){std::this_thread::sleep_for(std::chrono::seconds(3));
+  if(want){std::this_thread::sleep_for(std::chrono::seconds(2));
    try{ms::probe::apiTable(sharedDir(pkg)+"/api-table.txt");bootLog(pkg,"api-probe","已写出 api-table.txt");}
    catch(const std::exception& e){bootLog(pkg,"api-probe-failed",e.what());}}}
  // UID hiding: hooked only when "hideUid" is on at this start. Each address must be inside an executable segment and

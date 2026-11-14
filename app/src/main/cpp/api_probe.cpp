@@ -11,15 +11,16 @@
 #include <vector>
 
 namespace {
-struct Mod { std::string name; uintptr_t base; const ElfW(Phdr)* ph; size_t n; };
+struct Mod { std::string name; std::string path; uintptr_t base; const ElfW(Phdr)* ph; size_t n; };
 
 int collect(dl_phdr_info* info, size_t, void* p) {
     auto& v = *static_cast<std::vector<Mod>*>(p);
-    std::string name = info->dlpi_name ? info->dlpi_name : "";
+    std::string path = info->dlpi_name ? info->dlpi_name : "";
+    std::string name = path;
     auto slash = name.find_last_of('/');
     if (slash != std::string::npos) name = name.substr(slash + 1);
     if (name.empty() || !info->dlpi_addr) return 0;      // 主程序映像和空名字跳过
-    v.push_back({name, uintptr_t(info->dlpi_addr), info->dlpi_phdr, size_t(info->dlpi_phnum)});
+    v.push_back({name, path, uintptr_t(info->dlpi_addr), info->dlpi_phdr, size_t(info->dlpi_phnum)});
     return 0;
 }
 
@@ -122,12 +123,21 @@ void apiTable(const std::string& path) {
 
     using TableFn = void* (*)();
     // 已经在进程里了，NOLOAD 拿句柄；拿不到就走全局符号表，两条都不成才是真的没有。
+    // 三种拿法依次试：按 soname、按 dl_iterate_phdr 看到的完整路径、全局符号表。
+    // 崩铁是 android_dlopen_ext 加载的，linker namespace 跟我们的 so 不一定是同一个，
+    // 按 soname 可能命中不了，完整路径最可靠。
     TableFn getTable = nullptr;
-    if (void* lib = dlopen("libil2cpp.so", RTLD_NOW | RTLD_NOLOAD)) {
-        getTable = reinterpret_cast<TableFn>(dlsym(lib, "il2cpp_get_api_table"));
-    }
+    auto tryHandle = [&](void* h) {
+        if (h && !getTable) getTable = reinterpret_cast<TableFn>(dlsym(h, "il2cpp_get_api_table"));
+    };
+    tryHandle(dlopen("libil2cpp.so", RTLD_NOW | RTLD_NOLOAD));
+    for (const auto& m : mods) if (m.name == "libil2cpp.so" && !getTable) tryHandle(dlopen(m.path.c_str(), RTLD_NOW | RTLD_NOLOAD));
     if (!getTable) getTable = reinterpret_cast<TableFn>(dlsym(RTLD_DEFAULT, "il2cpp_get_api_table"));
-    if (!getTable) throw std::runtime_error("找不到 il2cpp_get_api_table（既没有 NOLOAD 句柄，全局符号表里也没有）");
+    if (!getTable) {
+        std::string seen;
+        for (const auto& m : mods) if (m.name.find("cpp") != std::string::npos || m.name.find("unity") != std::string::npos) seen += m.name + " ";
+        throw std::runtime_error("找不到 il2cpp_get_api_table；进程里相关的库：" + (seen.empty() ? std::string("（没有名字含 cpp/unity 的模块）") : seen));
+    }
 
     std::string out;
     char line[512];
