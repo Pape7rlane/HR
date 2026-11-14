@@ -31,6 +31,30 @@ bootstrap.cpp 只认            →  按优先级认 libil2cpp.so / libunity.so 
 
 默认是空表。空表时 `bootstrap` 在挂钩之前就返回，只写状态和一条 `offsets-pending` 日志——这是故意的，宁可什么都不做，也不要拿别人版本的 RVA 去 `DobbyHook` 一个 4 字节的地方，那样是必崩。
 
+## 逆向结论（重要）
+
+**不要从 metadata 入手**——崩铁 4.6.54 那条路是死的。完整记录见
+[`docs/REVERSE-ENGINEERING.md`](docs/REVERSE-ENGINEERING.md)。
+
+已确认不可行的五条：
+
+| 路线 | 结论 |
+|---|---|
+| il2cpp 导出 API | 唯一导出的 `il2cpp_get_api_table` 是反调试桩，调用即 SIGSEGV |
+| 内存找明文 metadata | 2.7 GB 全扫，magic 和正文片段零命中 |
+| APS2 压缩重定位 | group 编码解不开，offset 从第一项就不对齐 |
+| CPU 蒙皮函数 | 一次都没被调用，是 GPU 蒙皮 |
+| Vulkan 顶点捕获 | 游戏不走 Vulkan，50 秒 0 个 buffer |
+
+**走通的是 GLES**：`glBufferData` 在 `libGLESv2.so` 里是导出的，挂钩后能直接拿到顶点数据。
+实测抓到 49 MB / 40 个缓冲，按 stride 12 解析出 17,300 个真实顶点（登录界面的列车车厢）。
+
+顶点格式：位置在 offset 0（3×FLOAT），完整格式 stride 32（位置 + 4×UBYTE 法线 + UV + UV2）。
+
+下一步是下载完整资源、进到有角色的界面，再抓一次。
+
+---
+
 ## 已知版本：国际服 4.6.54
 
 实测（`com.HoYoverse.hkrpgoversea`，单 APK 490 MB，arm64-v8a 共 29 个 so）：
