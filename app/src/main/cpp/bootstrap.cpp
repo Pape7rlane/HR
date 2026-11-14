@@ -122,7 +122,19 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  {auto mode=ms::vkcap::Mode::Off;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();const auto& t=c.at("textureMods");
    if(t.type==ms::Json::Object){auto flag=[&](const char* k){return t.at(k).type==ms::Json::Bool&&t.at(k).boolean;};
     mode=ms::vkcap::modeFrom(t.at("hashMode").type==ms::Json::String?t.at("hashMode").string:std::string(),flag("ibHash"),flag("capture"));}}catch(const std::exception&){}
-  // 顶点缓冲捕获：蒙皮走 GPU 之后，定点数据的唯一必经之路就是 Vulkan 上传。
+  // 记录进程实际用了哪套图形 API：libvulkan 还是 libGLESv2/v3。走 GLES 的话 Vulkan 钩子一辈子都不会响。
+ {struct G {std::string text;int n=0;};
+  static G g;
+  struct C {static int f(dl_phdr_info* i,size_t,void*) {
+    std::string n=i->dlpi_name?i->dlpi_name:"";
+    auto s=n.find_last_of('/');std::string b=s==std::string::npos?n:n.substr(s+1);
+    if(b=="libvulkan.so"||b=="libGLESv2.so"||b=="libGLESv3.so"||b=="libEGL.so"||b=="libhwcpipe.so"){
+      g.text+=(g.text.empty()?"":" ")+b; g.n++;}
+    return 0;}};
+  dl_iterate_phdr(C::f,nullptr);
+  bootLog(pkg,"graphics-api",g.n?g.text:"（没看到 vulkan/GLES/EGL，可能还没加载）");}
+
+ // 顶点缓冲捕获：蒙皮走 GPU 之后，定点数据的唯一必经之路就是 Vulkan 上传。
   bool wantVertex=true;
   {try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("vertexCapture");if(v.type==ms::Json::Bool)wantVertex=v.boolean;}catch(const std::exception&){}}
   if(wantVertex&&mode==ms::vkcap::Mode::Off)mode=ms::vkcap::Mode::Collect;
