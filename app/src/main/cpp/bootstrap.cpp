@@ -122,19 +122,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  {auto mode=ms::vkcap::Mode::Off;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();const auto& t=c.at("textureMods");
    if(t.type==ms::Json::Object){auto flag=[&](const char* k){return t.at(k).type==ms::Json::Bool&&t.at(k).boolean;};
     mode=ms::vkcap::modeFrom(t.at("hashMode").type==ms::Json::String?t.at("hashMode").string:std::string(),flag("ibHash"),flag("capture"));}}catch(const std::exception&){}
-  // 记录进程实际用了哪套图形 API：libvulkan 还是 libGLESv2/v3。走 GLES 的话 Vulkan 钩子一辈子都不会响。
- {struct G {std::string text;int n=0;};
-  static G g;
-  struct C {static int f(dl_phdr_info* i,size_t,void*) {
-    std::string n=i->dlpi_name?i->dlpi_name:"";
-    auto s=n.find_last_of('/');std::string b=s==std::string::npos?n:n.substr(s+1);
-    if(b=="libvulkan.so"||b=="libGLESv2.so"||b=="libGLESv3.so"||b=="libEGL.so"||b=="libhwcpipe.so"){
-      g.text+=(g.text.empty()?"":" ")+b; g.n++;}
-    return 0;}};
-  dl_iterate_phdr(C::f,nullptr);
-  bootLog(pkg,"graphics-api",g.n?g.text:"（没看到 vulkan/GLES/EGL，可能还没加载）");}
-
- // 顶点缓冲捕获：蒙皮走 GPU 之后，定点数据的唯一必经之路就是 Vulkan 上传。
+  // 顶点缓冲捕获：蒙皮走 GPU 之后，定点数据的唯一必经之路就是 Vulkan 上传。
   bool wantVertex=true;
   {try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("vertexCapture");if(v.type==ms::Json::Bool)wantVertex=v.boolean;}catch(const std::exception&){}}
   if(wantVertex&&mode==ms::vkcap::Mode::Off)mode=ms::vkcap::Mode::Collect;
@@ -170,6 +158,18 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
   }}
  std::thread([pkg,priv]{try{bootStatus(pkg,"waiting","等待游戏引擎库（libil2cpp.so / libunity.so）");Image image;for(unsigned n=0;n<480&&!image.base;n++){dl_iterate_phdr(findImage,&image);if(!image.base)std::this_thread::sleep_for(std::chrono::milliseconds(500));}ms::require(image.base!=0,"等待游戏引擎库加载超时（libil2cpp.so / libunity.so）");
  bootLog(pkg,"engine-lib","引擎库："+image.name);
+ // 记录进程实际用了哪套图形 API：libvulkan 还是 libGLESv2/v3。走 GLES 的话 Vulkan 钩子一辈子都不会响。
+ {struct G {std::string text;int n=0;};
+  static G g;
+  struct C {static int f(dl_phdr_info* i,size_t,void*) {
+    std::string n=i->dlpi_name?i->dlpi_name:"";
+    auto s=n.find_last_of('/');std::string b=s==std::string::npos?n:n.substr(s+1);
+    if(b=="libvulkan.so"||b=="libGLESv2.so"||b=="libGLESv3.so"||b=="libEGL.so"||b=="libhwcpipe.so"){
+      g.text+=(g.text.empty()?"":" ")+b; g.n++;}
+    return 0;}};
+  dl_iterate_phdr(C::f,nullptr);
+  bootLog(pkg,"graphics-api",g.n?g.text:"（没看到 vulkan/GLES/EGL，可能还没加载）");}
+
  // 托管库单独找：崩铁的 il2cpp 侧偏移（objectNew / arrayNew / typeObject …）都在 libil2cpp.so 里。
  // Unity 先加载 libunity.so，il2cpp 要晚一步（实测启动 4 秒时还没进进程），所以这里必须等，不能看一眼就判死刑。
  Image managed;
