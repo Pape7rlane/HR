@@ -19,6 +19,17 @@ using GlBufferData = void (*)(uint32_t, int64_t, const void*, uint32_t);
 using GlBufferSubData = void (*)(uint32_t, int64_t, int64_t, const void*);
 
 using GlVertexAttribPointer = void (*)(uint32_t, int32_t, uint32_t, uint8_t, int32_t, const void*);
+using GlMapBufferRange = void* (*)(uint32_t, int64_t, int64_t, uint32_t);
+using GlMapBuffer = void* (*)(uint32_t, uint32_t);
+using GlUnmapBuffer = uint8_t (*)(uint32_t);
+
+GlMapBufferRange g_mapRangeOrig = nullptr;
+GlMapBuffer g_mapOrig = nullptr;
+GlUnmapBuffer g_unmapOrig = nullptr;
+// 渲染线程单线程用，普通静态变量足够
+uint32_t g_mapTarget = 0;
+void* g_mapPtr = nullptr;
+int64_t g_mapLen = 0;
 GlVertexAttribPointer g_attribOrig = nullptr;
 std::mutex g_am;
 std::vector<ms::gles::Attrib> g_attribs;
@@ -76,6 +87,25 @@ void onAttribPointer(uint32_t index, int32_t size, uint32_t type, uint8_t normal
     if (g_attribOrig) g_attribOrig(index, size, type, normalized, stride, ptr);
 }
 
+// 部分引擎不做 glBufferData，而是 map 一段显存直接写，unmap 时才落数据。
+void* onMapBufferRange(uint32_t target, int64_t off, int64_t len, uint32_t access) {
+    void* p = g_mapRangeOrig ? g_mapRangeOrig(target, off, len, access) : nullptr;
+    if (p && target == kArrayBuffer) { g_mapTarget = target; g_mapPtr = p; g_mapLen = len; }
+    return p;
+}
+void* onMapBuffer(uint32_t target, uint32_t access) {
+    void* p = g_mapOrig ? g_mapOrig(target, access) : nullptr;
+    if (p && target == kArrayBuffer) { g_mapTarget = target; g_mapPtr = p; g_mapLen = -1; }
+    return p;
+}
+uint8_t onUnmapBuffer(uint32_t target) {
+    if (target == kArrayBuffer && g_mapPtr && g_mapLen > 0) {
+        record(target, g_mapLen, g_mapPtr);
+        g_mapPtr = nullptr; g_mapLen = 0;
+    }
+    return g_unmapOrig ? g_unmapOrig(target) : 1;
+}
+
 void onBufferData(uint32_t target, int64_t size, const void* data, uint32_t usage) {
     record(target, size, data);
     if (g_glBufferDataOrig) g_glBufferDataOrig(target, size, data, usage);
@@ -115,6 +145,15 @@ bool install() {
         return false;
     }
 
+    void* mpr = dlsym(lib, "glMapBufferRange");
+    if (mpr) DobbyHook(mpr, reinterpret_cast<dobby_dummy_func_t>(&onMapBufferRange),
+                       reinterpret_cast<dobby_dummy_func_t*>(&g_mapRangeOrig));
+    void* mp = dlsym(lib, "glMapBuffer");
+    if (mp) DobbyHook(mp, reinterpret_cast<dobby_dummy_func_t>(&onMapBuffer),
+                      reinterpret_cast<dobby_dummy_func_t*>(&g_mapOrig));
+    void* ub = dlsym(lib, "glUnmapBuffer");
+    if (ub) DobbyHook(ub, reinterpret_cast<dobby_dummy_func_t>(&onUnmapBuffer),
+                      reinterpret_cast<dobby_dummy_func_t*>(&g_unmapOrig));
     void* vap = dlsym(lib, "glVertexAttribPointer");
     if (!vap) vap = dlsym(RTLD_DEFAULT, "glVertexAttribPointer");
     if (vap) {
@@ -128,7 +167,7 @@ bool install() {
                   reinterpret_cast<dobby_dummy_func_t*>(&g_glBufferSubDataOrig));
     }
     g_installed = true;
-    g_detail = "glBufferData 已挂钩";
+    g_detail = "glBufferData + glMapBufferRange 已挂钩";
     return true;
 }
 
