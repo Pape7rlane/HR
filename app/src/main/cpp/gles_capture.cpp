@@ -11,7 +11,8 @@ namespace {
 
 constexpr uint32_t kArrayBuffer = 0x8892;    // GL_ARRAY_BUFFER
 constexpr uint32_t kElementBuffer = 0x8893;  // GL_ELEMENT_ARRAY_BUFFER
-constexpr size_t kKeepBytes = 256 * 1024;    // 每个缓冲最多留 256 KB
+constexpr size_t kKeepBytes = 1024 * 1024;    // 每个缓冲最多留 1 MB
+constexpr size_t kMinDeclared = 4096;        // 小于 4 KB 的多半是 UI/粒子，跳过
 constexpr size_t kKeepBlobs = 32;            // 最多留 32 个
 
 using GlBufferData = void (*)(uint32_t, int64_t, const void*, uint32_t);
@@ -35,6 +36,7 @@ void record(uint32_t target, int64_t size, const void* data) {
     else if (target == kElementBuffer) g_indexUploads.fetch_add(1, std::memory_order_relaxed);
     else g_otherUploads.fetch_add(1, std::memory_order_relaxed);
     if (target != kArrayBuffer) return;                 // 只看顶点缓冲
+    if (uint64_t(size) < kMinDeclared) return;          // 太小，跳过（UI/粒子）
     if (g_out.size() >= kKeepBlobs) return;             // 先读 size，无锁快速返回
     std::lock_guard<std::mutex> l(g_m);
     if (g_out.size() >= kKeepBlobs) return;

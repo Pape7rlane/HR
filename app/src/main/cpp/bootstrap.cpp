@@ -168,6 +168,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
    std::thread([pkg]{
      if(!ms::gles::install()){bootLog(pkg,"gles-capture-failed",ms::gles::stats().detail);return;}
      bootLog(pkg,"gles-capture","已挂钩 "+ms::gles::stats().detail);
+     size_t done=0;
      for(int i=0;i<30;i++){
        std::this_thread::sleep_for(std::chrono::seconds(5));
        auto st=ms::gles::stats();
@@ -175,6 +176,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
                " 次，索引 "+std::to_string(st.indexUploads)+" 次，共 "+std::to_string(st.totalBytes/1024)+" KB");
        auto blobs=ms::gles::take();
        if(blobs.empty())continue;
+       done+=blobs.size();
        std::string out="# HSRBox —— GLES 顶点缓冲\n";
        char b[256];
        for(auto& v:blobs){
@@ -195,8 +197,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
          }
        }
        try{ms::write(sharedDir(pkg)+"/gles-vertex.txt",out);}catch(...){}
-       bootLog(pkg,"gles-capture-done","已写出 gles-vertex.txt，"+std::to_string(blobs.size())+" 个缓冲");
-       return;
+       bootLog(pkg,"gles-capture-done","已写出 gles-vertex.txt，累计 "+std::to_string(done)+" 个缓冲");
      }
    }).detach();
   }}
