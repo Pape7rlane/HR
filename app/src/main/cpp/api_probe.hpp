@@ -31,4 +31,6 @@ uint64_t skinCallCount();
 // 打开顶点采样：下一次 hook 命中时把前若干个顶点和骨骼矩阵记下来，写到 outPath。
 void startVertexCapture(const std::string& outPath);
 bool vertexCaptureDone();
+// 由普通线程调用，把采样结果写成文本；没有样本返回 false。
+bool writeVertexSample(const std::string& outPath);
 }
