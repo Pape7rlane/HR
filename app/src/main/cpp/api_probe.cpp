@@ -143,8 +143,9 @@ struct KnownSymbol { const char* buildId; const char* name; uintptr_t rva; };
 static const KnownSymbol kKnown[] = {
     {"8c76cb8b4f65ae2a", "il2cpp_get_api_table", 0x6dcdc4c},
 };
-// 0x6dcdc4c 处录到的首字（一条 B：17 ff 8f f2，小端读作 0xf28fff17）。
-static constexpr uint32_t kEntryWord = 0xf28fff17u;
+// 0x6dcdc4c 处录到的首字：一条 B 指令，编码 0x17ff8ff2（内存字节 f2 8f ff 17），
+// 跳去 0x6db1c14。注意这里是按 uint32 的值写的，不是十六进制文本的字节顺序。
+static constexpr uint32_t kEntryWord = 0x17ff8ff2u;
 
 void apiTable(const std::string& path) {
     g_path = path;
