@@ -130,6 +130,8 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
    bootLog(pkg,ok?"vulkan-capture":"vulkan-capture-disabled",ok?"已安装："+detail:detail);
    if(ok&&wantVertex){
     std::thread([pkg]{for(int i=0;i<24;i++){std::this_thread::sleep_for(std::chrono::seconds(5));
+      {auto c=ms::vkcap::tracker().counts();
+       bootLog(pkg,"vk-buffers","第 "+std::to_string(i*5+5)+" 秒：buffer "+std::to_string(c.first)+" 个，其中 vertex "+std::to_string(c.second)+" 个");}
       auto blobs=ms::vkcap::tracker().takeVertex();
       if(blobs.empty())continue;
       std::string out="# HSRBox —— 顶点缓冲捕获\n";
