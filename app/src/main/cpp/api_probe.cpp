@@ -4,6 +4,7 @@
 #include <csignal>
 #include <csetjmp>
 #include <cstdio>
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <dlfcn.h>
@@ -385,24 +386,25 @@ size_t memScanMetadata(const std::string& outPath) {
     auto old = ::signal(SIGSEGV, onGuardSignal);
     size_t totalBytes = 0, anonRegions = 0, crashed = 0;
     static constexpr uint8_t kMagic[4] = {0xaf, 0x1b, 0xb1, 0xfa};
-    // 精准打法：metadata 磁盘上是 105,568,912 字节，运行时载体大小必然接近这个数。
-    // 只扫 90–130 MB 的映射，区域个位数，几乎没有踩到已释放页的机会，也快。
-    constexpr size_t kMetaMin = 90ull * 1024 * 1024, kMetaMax = 130ull * 1024 * 1024;
+    // 关键认识：metadata 只有前 0x200 字节是加过密的（磁盘上熵 5.7，0x200 之后熵 2.0，是明文）。
+    // 所以真正要找的不是 105 MB 的整块，而是运行时解密出来的那 512 字节 header。
+    // 它落在哪个堆块里都正常，所以这里反过来：小区域全扫，大区域只扫开头。
+    constexpr size_t kScanCap = 8ull * 1024 * 1024;   // 每个区域最多看前 8 MB
     size_t bigRegions = 0;
     for (const auto& r : ranges) {
         if (r.exec) continue;
         const size_t sz = size_t(r.end - r.start);
-        if (sz < kMetaMin || sz > kMetaMax) continue;
+        if (sz < 4 * 1024) continue;                    // 小到放不下 header 的跳过
         bigRegions++;
         if (sigsetjmp(g_guard, 1) != 0) { g_armed = 0; crashed++; continue; }
         g_armed = 1;
         anonRegions++;
         auto* p = reinterpret_cast<const uint8_t*>(r.start);
         const size_t len = size_t(r.end - r.start);
-        totalBytes += len;
+        totalBytes += size_t(stop - p);
         if (r.path.size() < 120) { /* 记下候选，便于下一次核对 */ }
         const uint8_t* at = p;
-        const uint8_t* stop = p + len;
+        const uint8_t* stop = p + (len > kScanCap ? kScanCap : len);
         while (at + 4 <= stop) {
             const void* hit = memmem(at, size_t(stop - at), kMagic, 4);
             if (!hit) break;
@@ -411,7 +413,7 @@ size_t memScanMetadata(const std::string& outPath) {
                 int32_t version = 0;
                 std::memcpy(&version, h + 4, 4);
                 if (version >= 16 && version <= 40) {
-                    const size_t dumpLen = size_t(stop - h);
+                    const size_t dumpLen = std::min<size_t>(size_t(stop - h), 0x1000);   // header 就 512 字节，多留一点余量
                     std::ofstream f(outPath, std::ios::binary | std::ios::trunc);
                     if (f) { f.write(reinterpret_cast<const char*>(h), std::streamsize(dumpLen)); f.flush(); }
                     g_armed = 0;
