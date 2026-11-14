@@ -132,7 +132,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
    if(ok&&wantVertex){
     std::thread([pkg]{for(int i=0;i<24;i++){std::this_thread::sleep_for(std::chrono::seconds(5));
       {auto c=ms::vkcap::tracker().counts();
-       bootLog(pkg,"vk-buffers","第 "+std::to_string(i*5+5)+" 秒：buffer "+std::to_string(c.first)+" 个，其中 vertex "+std::to_string(c.second)+" 个");}
+       bootLog(pkg,"vk-buffers","第 "+std::to_string(i*2+2)+" 秒：buffer "+std::to_string(c.first)+" 个，其中 vertex "+std::to_string(c.second)+" 个");}
       auto blobs=ms::vkcap::tracker().takeVertex();
       if(blobs.empty())continue;
       std::string out="# HSRBox —— 顶点缓冲捕获\n";
@@ -170,10 +170,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
      bootLog(pkg,"gles-capture","已挂钩 "+ms::gles::stats().detail);
      size_t done=0;
      try{std::filesystem::create_directories(sharedDir(pkg)+"/gles-raw");}catch(...){}
-     for(int i=0;i<30;i++){
-       std::this_thread::sleep_for(std::chrono::seconds(5));
+     for(int i=0;i<75;i++){
+       std::this_thread::sleep_for(std::chrono::seconds(2));
        auto st=ms::gles::stats();
-       bootLog(pkg,"gles-stats","第 "+std::to_string(i*5+5)+" 秒：顶点上传 "+std::to_string(st.arrayUploads)+
+       bootLog(pkg,"gles-stats","第 "+std::to_string(i*2+2)+" 秒：顶点上传 "+std::to_string(st.arrayUploads)+
                " 次，索引 "+std::to_string(st.indexUploads)+" 次，共 "+std::to_string(st.totalBytes/1024)+" KB");
        // 属性布局：游戏自己声明的 stride/offset，不用猜
        {auto at=ms::gles::attribs();
