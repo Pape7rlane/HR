@@ -28,4 +28,7 @@ size_t probeUnitySymbols(const std::string& outPath);
 // 返回成功挂上的个数。游戏如果因为签名不对崩掉，说明这批函数不是这个调用约定，回退即可。
 size_t hookSkinning();
 uint64_t skinCallCount();
+// 打开顶点采样：下一次 hook 命中时把前若干个顶点和骨骼矩阵记下来，写到 outPath。
+void startVertexCapture(const std::string& outPath);
+bool vertexCaptureDone();
 }

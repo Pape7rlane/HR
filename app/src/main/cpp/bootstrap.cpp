@@ -147,7 +147,13 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
   if(want){try{const size_t n=ms::probe::hookSkinning();
        bootLog(pkg,"skin-hook","挂上 "+std::to_string(n)+" 个蒙皮函数，开始计数");
        std::thread([pkg]{for(int i=1;i<=6;i++){std::this_thread::sleep_for(std::chrono::seconds(10));
-         bootLog(pkg,"skin-count","第 "+std::to_string(i*10)+" 秒累计调用 "+std::to_string(ms::probe::skinCallCount())+" 次");}}).detach();}
+         bootLog(pkg,"skin-count","第 "+std::to_string(i*10)+" 秒累计调用 "+std::to_string(ms::probe::skinCallCount())+" 次");}}).detach();
+       // 15 秒后采一次顶点样（只读），搞清顶点流布局
+       std::thread([pkg]{std::this_thread::sleep_for(std::chrono::seconds(15));
+         ms::probe::startVertexCapture(sharedDir(pkg)+"/vertex-sample.txt");
+         for(int i=0;i<20;i++){std::this_thread::sleep_for(std::chrono::seconds(1));
+           if(ms::probe::vertexCaptureDone()){bootLog(pkg,"vertex-sample","已写出 vertex-sample.txt");return;}}
+         bootLog(pkg,"vertex-sample","20 秒内没等到蒙皮调用（采样未触发）");}).detach();}
    catch(const std::exception& e){bootLog(pkg,"skin-hook-failed",e.what());}}}
 
  // 内存里找明文 global-metadata.dat：磁盘上那份是 MHY\0 加密的，il2cpp 要用就得先解密进内存，

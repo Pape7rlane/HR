@@ -493,6 +493,9 @@ size_t probeUnitySymbols(const std::string& outPath) {
 // ---------------------------------------------------------------- 蒙皮计数
 namespace {
 std::atomic<uint64_t> g_skinCalls{0};
+std::atomic<bool> g_captureWanted{false};
+std::atomic<bool> g_captureDone{false};
+std::string g_capturePath;
 using SkinFn = void (*)(void*, void*, void*, void*, void*, void*, void*, void*);
 SkinFn g_orig[6] = {nullptr};
 int g_hooked = 0;
@@ -500,6 +503,58 @@ int g_hooked = 0;
 template <int N>
 void skinTrampoline(void* a, void* b, void* c, void* d, void* e, void* f, void* g, void* h) {
     g_skinCalls.fetch_add(1, std::memory_order_relaxed);
+    if (N == 1 && g_captureWanted.load(std::memory_order_relaxed) && !g_captureDone.load(std::memory_order_relaxed)) {
+        // x0 = 骨骼矩阵数组, x1 = 顶点流游标, x2 = 终点, x3 = 骨骼索引
+        // 这里只读，不改任何东西
+        if (g_captureWanted.exchange(false)) {
+            g_captureDone.store(true, std::memory_order_relaxed);
+            auto* verts = static_cast<const uint8_t*>(b);
+            auto* end = static_cast<const uint8_t*>(c);
+            auto* indices = static_cast<const uint8_t*>(d);
+            auto* bones = static_cast<const float*>(a);
+            std::string out = "# HSRBox —— 蒙皮调用采样（只读）\n";
+            char line[256];
+            const size_t span = size_t(end - verts);
+            std::snprintf(line, sizeof line, "顶点流跨度 %zu 字节, 骨骼矩阵基址 %p, 索引指针 %p\n\n", span, a, d);
+            out += line;
+            // 顶点流按 24 字节步长看（从反汇编推断：16 + 8）
+            const size_t strides[3] = {24, 32, 20};
+            for (size_t st : strides) {
+                std::snprintf(line, sizeof line, "=== 假设步长 %zu 字节 ===\n", st);
+                out += line;
+                for (int i = 0; i < 4 && size_t(i + 1) * st <= span; i++) {
+                    const uint8_t* v = verts + size_t(i) * st;
+                    const float* fv = reinterpret_cast<const float*>(v);
+                    std::snprintf(line, sizeof line, "  顶点%d: %08x %08x %08x %08x %08x %08x | f=%.3f %.3f %.3f %.3f %.3f %.3f\n",
+                                  i, fv[0] ? *reinterpret_cast<const uint32_t*>(v) : 0,
+                                  *reinterpret_cast<const uint32_t*>(v + 4),
+                                  *reinterpret_cast<const uint32_t*>(v + 8),
+                                  *reinterpret_cast<const uint32_t*>(v + 12),
+                                  *reinterpret_cast<const uint32_t*>(v + 16),
+                                  *reinterpret_cast<const uint32_t*>(v + 20),
+                                  double(fv[0]), double(fv[1]), double(fv[2]),
+                                  double(fv[3]), double(fv[4]), double(fv[5]));
+                    out += line;
+                }
+            }
+            // 骨骼索引与矩阵
+            out += "\n=== 骨骼索引（前 16 字节）===\n";
+            for (int i = 0; i < 4; i++) {
+                std::snprintf(line, sizeof line, "  [%d] %02x\n", i, indices ? indices[i] : 0);
+                out += line;
+            }
+            out += "\n=== 骨骼矩阵（前 2 个 4x4）===\n";
+            for (int m = 0; m < 2; m++) {
+                for (int r = 0; r < 4; r++) {
+                    const float* row = bones + m * 16 + r * 4;
+                    std::snprintf(line, sizeof line, "  m%d r%d: %8.4f %8.4f %8.4f %8.4f\n", m, r,
+                                  double(row[0]), double(row[1]), double(row[2]), double(row[3]));
+                    out += line;
+                }
+            }
+            try { write(g_capturePath, out); } catch (...) {}
+        }
+    }
     if (g_orig[N]) g_orig[N](a, b, c, d, e, f, g, h);
 }
 void (*const g_thunks[6])(void*, void*, void*, void*, void*, void*, void*, void*) = {
@@ -538,5 +593,13 @@ size_t hookSkinning() {
 }
 
 uint64_t skinCallCount() { return g_skinCalls.load(std::memory_order_relaxed); }
+
+void startVertexCapture(const std::string& outPath) {
+    g_capturePath = outPath;
+    g_captureDone.store(false, std::memory_order_relaxed);
+    g_captureWanted.store(true, std::memory_order_relaxed);
+}
+
+bool vertexCaptureDone() { return g_captureDone.load(std::memory_order_relaxed); }
 
 }  // namespace ms::probe
