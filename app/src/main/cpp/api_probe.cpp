@@ -30,7 +30,60 @@ struct Mod {
     const ElfW(Dyn)* dyn = nullptr;
 };
 
-uintptr_t dynSymbol(const Mod& m, const char* want, std::string& why);
+// 在 PT_DYNAMIC 里按名字查符号。崩铁的 so 是 android_dlopen_ext 加进自己的 linker
+// namespace 的，dlsym 看不到；但 dl_iterate_phdr 能看到模块，PT_DYNAMIC 也拿得到。
+uintptr_t dynSymbol(const Mod& m, const char* want, std::string& why) {
+    if (!m.dyn) { why = "没有 PT_DYNAMIC"; return 0; }
+    uintptr_t symtab = 0, strtab = 0, hash = 0, gnuhash = 0;
+    size_t strsz = 0, syment = 0;
+    for (const ElfW(Dyn)* d = m.dyn; d->d_tag != DT_NULL; ++d) {
+        if (d->d_tag == DT_SYMTAB) symtab = uintptr_t(d->d_un.d_ptr);
+        else if (d->d_tag == DT_STRTAB) strtab = uintptr_t(d->d_un.d_ptr);
+        else if (d->d_tag == DT_STRSZ) strsz = size_t(d->d_un.d_val);
+        else if (d->d_tag == DT_SYMENT) syment = size_t(d->d_un.d_val);
+        else if (d->d_tag == DT_HASH) hash = uintptr_t(d->d_un.d_ptr);
+        else if (d->d_tag == 0x6ffffef5) gnuhash = uintptr_t(d->d_un.d_ptr);   // DT_GNU_HASH
+    }
+    auto fix = [&](uintptr_t p) { return (p && p < m.base) ? m.base + p : p; };
+    symtab = fix(symtab); strtab = fix(strtab); hash = fix(hash); gnuhash = fix(gnuhash);
+    if (!symtab || !strtab || !strsz) {
+        char b[180];
+        std::snprintf(b, sizeof b, "动态段不全 symtab=%#zx strtab=%#zx strsz=%zu",
+                      size_t(symtab), size_t(strtab), strsz);
+        why = b;
+        return 0;
+    }
+    size_t count = 0;
+    if (hash) {
+        count = reinterpret_cast<const uint32_t*>(hash)[1];
+    } else if (gnuhash) {
+        auto* g = reinterpret_cast<const uint32_t*>(gnuhash);
+        uint32_t nbuckets = g[0], symoffset = g[1], bloom = g[2];
+        const uint32_t* buckets = g + 4 + size_t(bloom) * 2;
+        const uint32_t* chains = buckets + nbuckets;
+        uint32_t last = 0;
+        for (uint32_t b = 0; b < nbuckets; b++) if (buckets[b] > last) last = buckets[b];
+        if (last < symoffset) last = symoffset;
+        count = last;
+        while (count < 400000 && (chains[count - symoffset] & 1u) == 0) count++;
+        count++;
+    } else {
+        why = "既没有 DT_HASH 也没有 DT_GNU_HASH";
+        return 0;
+    }
+    if (count > 400000) count = 400000;
+    auto* syms = reinterpret_cast<const ElfW(Sym)*>(symtab);
+    for (size_t i = 0; i < count; i++) {
+        uint32_t off = uint32_t(syms[i].st_name);
+        if (!off || off >= strsz || !syms[i].st_value) continue;
+        if (std::strcmp(reinterpret_cast<const char*>(strtab + off), want) == 0)
+            return m.base + uintptr_t(syms[i].st_value);
+    }
+    char b[160];
+    std::snprintf(b, sizeof b, "扫了 %zu 个符号没命中", count);
+    why = b;
+    return 0;
+}
 
 int collect(dl_phdr_info* info, size_t, void* p) {
     auto& v = *static_cast<std::vector<Mod>*>(p);
@@ -286,62 +339,5 @@ void apiTable(const std::string& path) {
     ::signal(SIGSEGV, old);
     flush();
 }
-
-namespace {
-// 在 PT_DYNAMIC 里按名字查符号。崩铁的 so 是 android_dlopen_ext 加进自己的 linker namespace 的，
-// dlsym 看不到；但 dl_iterate_phdr 能看到模块，PT_DYNAMIC 也能拿，自己查一遍就行。
-uintptr_t dynSymbol(const Mod& m, const char* want, std::string& why) {
-    if (!m.dyn) { why = "没有 PT_DYNAMIC"; return 0; }
-    uintptr_t symtab = 0, strtab = 0, hash = 0, gnuhash = 0;
-    size_t strsz = 0, syment = 0;
-    for (const ElfW(Dyn)* d = m.dyn; d->d_tag != DT_NULL; ++d) {
-        if (d->d_tag == DT_SYMTAB) symtab = uintptr_t(d->d_un.d_ptr);
-        else if (d->d_tag == DT_STRTAB) strtab = uintptr_t(d->d_un.d_ptr);
-        else if (d->d_tag == DT_STRSZ) strsz = size_t(d->d_un.d_val);
-        else if (d->d_tag == DT_SYMENT) syment = size_t(d->d_un.d_val);
-        else if (d->d_tag == DT_HASH) hash = uintptr_t(d->d_un.d_ptr);
-        else if (d->d_tag == 0x6ffffef5) gnuhash = uintptr_t(d->d_un.d_ptr);   // DT_GNU_HASH
-    }
-    auto fix = [&](uintptr_t p) { return (p && p < m.base) ? m.base + p : p; };
-    symtab = fix(symtab); strtab = fix(strtab); hash = fix(hash); gnuhash = fix(gnuhash);
-    if (!symtab || !strtab || !strsz) {
-        char b[180];
-        std::snprintf(b, sizeof b, "动态段不全 symtab=%#zx strtab=%#zx strsz=%zu",
-                      size_t(symtab), size_t(strtab), strsz);
-        why = b;
-        return 0;
-    }
-    size_t count = 0;
-    if (hash) {
-        count = reinterpret_cast<const uint32_t*>(hash)[1];
-    } else if (gnuhash) {
-        auto* g = reinterpret_cast<const uint32_t*>(gnuhash);
-        uint32_t nbuckets = g[0], symoffset = g[1], bloom = g[2];
-        const uint32_t* buckets = g + 4 + size_t(bloom) * 2;
-        const uint32_t* chains = buckets + nbuckets;
-        uint32_t last = 0;
-        for (uint32_t b = 0; b < nbuckets; b++) if (buckets[b] > last) last = buckets[b];
-        if (last < symoffset) last = symoffset;
-        count = last;
-        while (count < 400000 && (chains[count - symoffset] & 1u) == 0) count++;
-        count++;
-    } else {
-        why = "既没有 DT_HASH 也没有 DT_GNU_HASH";
-        return 0;
-    }
-    if (count > 400000) count = 400000;
-    auto* syms = reinterpret_cast<const ElfW(Sym)*>(symtab);
-    for (size_t i = 0; i < count; i++) {
-        uint32_t off = uint32_t(syms[i].st_name);
-        if (!off || off >= strsz || !syms[i].st_value) continue;
-        if (std::strcmp(reinterpret_cast<const char*>(strtab + off), want) == 0)
-            return m.base + uintptr_t(syms[i].st_value);
-    }
-    char b[160];
-    std::snprintf(b, sizeof b, "扫了 %zu 个符号没命中", count);
-    why = b;
-    return 0;
-}
-}  // namespace
 
 }  // namespace ms::probe
