@@ -57,6 +57,7 @@ std::atomic<uint64_t> g_arrayUploads{0}, g_indexUploads{0}, g_otherUploads{0}, g
 std::atomic<uint64_t> g_seq{0};
 std::mutex g_m;
 std::vector<ms::gles::Blob> g_out;
+std::vector<std::tuple<uint64_t,uint64_t,uint32_t>> g_map;   // seq,handle,bytes
 
 // 渲染线程里只做 memcpy + 一次短锁，绝不碰文件。
 void record(uint32_t target, int64_t size, const void* data) {
@@ -72,11 +73,13 @@ void record(uint32_t target, int64_t size, const void* data) {
     if (g_out.size() >= kKeepBlobs) return;
     ms::gles::Blob b;
     for (int i = 0; i < 16; i++) if (g_stateUsed[i]) b.layout.push_back(g_state[i]);
+    b.handle = g_boundArrayBuffer.load(std::memory_order_relaxed);
     b.seq = ++g_seq;
     b.declared = uint64_t(size);
     const size_t keep = size_t(size) > kKeepBytes ? kKeepBytes : size_t(size);
     b.bytes = uint32_t(keep);
     b.data.assign(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + keep);
+    g_map.emplace_back(b.seq, b.handle, b.bytes);
     g_out.push_back(std::move(b));
 }
 
@@ -233,6 +236,11 @@ Stats stats() {
 }
 
 uint64_t patchHits() { return g_patchHits.load(std::memory_order_relaxed); }
+
+std::vector<std::tuple<uint64_t,uint64_t,uint32_t>> blobMap() {
+    std::lock_guard<std::mutex> l(g_m);
+    return g_map;
+}
 
 std::vector<std::pair<uint64_t,uint32_t>> drawCounts() {
     std::lock_guard<std::mutex> l(g_dm);

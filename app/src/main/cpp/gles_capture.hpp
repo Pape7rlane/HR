@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <tuple>
 
 namespace ms::gles {
 
@@ -16,6 +17,7 @@ struct Attrib {uint32_t index=0,size=0,type=0,normalized=0,stride=0; uintptr_t o
 
 struct Blob {
     uint64_t seq = 0;
+    uint64_t handle = 0;         // 上传时绑定的 GL buffer，和 draw 表对得上
     uint32_t bytes = 0;          // 实际留存字节数
     uint64_t declared = 0;       // 调用时报的 size（可能远大于留存量）
     std::vector<uint8_t> data;
@@ -45,6 +47,9 @@ std::vector<Attrib> attribs();
 
 // 写权限验证：命中多少次数（0 表示那个尺寸的缓冲没出现）
 uint64_t patchHits();
+
+// seq -> (handle, bytes)，拿到就能和 gles-draws.txt 的 handle 对上
+std::vector<std::tuple<uint64_t,uint64_t,uint32_t>> blobMap();
 
 // 每个顶点缓冲被画了几次（= 子网格数），指纹的第二个数字
 std::vector<std::pair<uint64_t,uint32_t>> drawCounts();

@@ -201,7 +201,14 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
         std::string out="# HSRBox —— 每个顶点缓冲的绘制次数\n# buffer_handle drawCount\n";
         char b[96];
         for(auto& kv:dc){std::snprintf(b,sizeof b,"%llx %u\n",(unsigned long long)kv.first,kv.second);out+=b;}
-        try{ms::write(sharedDir(pkg)+"/gles-draws.txt",out);}catch(...){}}
+        try{ms::write(sharedDir(pkg)+"/gles-draws.txt",out);}catch(...){}
+        // handle -> 文件 的映射，和 draw 表合起来才能定位
+        std::string mp="# seq handle bytes\n";
+        for(auto& t:ms::gles::blobMap()){
+          std::snprintf(b,sizeof b,"%llu %llx %u\n",(unsigned long long)std::get<0>(t),(unsigned long long)std::get<1>(t),std::get<2>(t));
+          mp+=b;
+        }
+        try{ms::write(sharedDir(pkg)+"/gles-map.txt",mp);}catch(...){}}
        if(blobs.empty())continue;
        // 存原始字节：步长和偏移得靠统计才能定，文本里 3 个顶点不够。
        for(auto& v:blobs){
