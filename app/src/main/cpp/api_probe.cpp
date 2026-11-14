@@ -33,7 +33,7 @@ Place locate(const std::vector<Mod>& mods, uintptr_t p) {
     for (const auto& m : mods) {
         for (size_t k = 0; k < m.n; k++) {
             ElfW(Phdr) h;
-            std::memcpy(&h, m.ph + k * sizeof(h), sizeof(h));
+            std::memcpy(&h, m.ph + k, sizeof(h));
             if (h.p_type != PT_LOAD) continue;
             uintptr_t start = m.base + uintptr_t(h.p_vaddr);
             if (p < start || p - start >= uintptr_t(h.p_memsz)) continue;
@@ -86,7 +86,7 @@ std::string thunk(const std::vector<Mod>& mods, uintptr_t p) {
 std::string buildIdOf(uintptr_t base, const ElfW(Phdr)* ph, size_t n) {
     for (size_t k = 0; k < n; k++) {
         ElfW(Phdr) h;
-        std::memcpy(&h, ph + k * sizeof(h), sizeof(h));
+        std::memcpy(&h, ph + k, sizeof(h));
         if (h.p_type != PT_NOTE || h.p_memsz > 1024 * 1024) continue;
         auto* note = reinterpret_cast<const uint8_t*>(base + uintptr_t(h.p_vaddr));
         size_t at = 0;
@@ -121,7 +121,7 @@ uintptr_t dynSymbol(const Mod& m, const char* want, std::string& why) {
     const ElfW(Dyn)* dyn = nullptr;
     for (size_t i = 0; i < m.n; i++) {
         ElfW(Phdr) h;
-        std::memcpy(&h, m.ph + i * sizeof(h), sizeof(h));
+        std::memcpy(&h, m.ph + i, sizeof(h));
         if (h.p_type == PT_DYNAMIC) dyn = reinterpret_cast<const ElfW(Dyn)*>(m.base + uintptr_t(h.p_vaddr));
     }
     if (!dyn) { why = "PT_DYNAMIC 没找到"; return 0; }
