@@ -18,4 +18,9 @@ void apiTable(const std::string& path, int round = 1);
 // 磁盘上那份是 MHY\0 加密的，但 il2cpp 要用它就必须先解密进内存——直接拿内存里的那份，
 // 不用去啃解密循环。返回 dump 出来的字节数，0 表示没找到。
 size_t memScanMetadata(const std::string& outPath);
+
+// 探测 libunity.so 的导出符号：这批是真实导出的（_s_SkinVertices* / _s_TransformVertices*），
+// 它们是"函数指针变量"，取到值就是 Unity 顶点处理/蒙皮的真实入口。
+// 这条路不需要 il2cpp metadata，是绕开数据加密的备选方案。只读，不挂钩。
+size_t probeUnitySymbols(const std::string& outPath);
 }

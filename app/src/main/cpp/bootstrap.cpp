@@ -135,9 +135,16 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  else{bootLog(pkg,"managed-lib","等了 120 秒仍没有 libil2cpp.so");dumpModules(pkg);}
  auto actual=ms::loadedBuildId(image.base,image.ph,image.count,sizeof(ElfW(Phdr)));
  if(!ms::abi::select(actual,managedId)){bootStatus(pkg,"buildid-mismatch","实际 Build ID："+actual);return;}
+ // libunity.so 的导出符号探测：那批 _s_SkinVertices* / _s_TransformVertices* 是真实导出的函数指针，
+ // 拿到就等于拿到顶点处理的入口，不需要 il2cpp metadata。只读，不挂钩。
+ {bool want=true;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("unitySymbols");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
+  if(want){try{const size_t n=ms::probe::probeUnitySymbols(sharedDir(pkg)+"/unity-symbols.txt");
+       bootLog(pkg,"unity-symbols","可用 "+std::to_string(n)+" 个，已写出 unity-symbols.txt");}
+   catch(const std::exception& e){bootLog(pkg,"unity-symbols-failed",e.what());}}}
+
  // 内存里找明文 global-metadata.dat：磁盘上那份是 MHY\0 加密的，il2cpp 要用就得先解密进内存，
  // 直接拿内存里那份，绕开解密逻辑。结果写到 HSRBox 目录下的 global-metadata.dat。
- {bool want=true;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("memScan");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
+ {bool want=false;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("memScan");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
   if(want){std::this_thread::sleep_for(std::chrono::seconds(20));
    try{const size_t n=ms::probe::memScanMetadata(sharedDir(pkg)+"/global-metadata.dat");
        bootLog(pkg,"metadata-dump","已从内存 dump "+std::to_string(n)+" 字节到 global-metadata.dat");}

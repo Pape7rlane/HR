@@ -434,4 +434,58 @@ size_t memScanMetadata(const std::string& outPath) {
                              std::to_string(skipped) + " 个超大区域）");
 }
 
+
+size_t probeUnitySymbols(const std::string& outPath) {
+    static const char* const kNames[] = {
+        "_s_SkinVertices_NEON",
+        "_s_SkinVertices_NoNormals_NEON",
+        "_s_SkinVertices_Tangents_NEON",
+        "_s_SkinVertices_Tangents1_NEON",
+        "_s_SkinVertices2Bones_NEON",
+        "_s_SkinVertices2Bones_NoNormals_NEON",
+        "_s_SkinVertices2Bones_Tangents_NEON",
+        "_s_SkinVertices2Bones_Tangents1_NEON",
+        "_s_SkinVertices4Bones_NEON",
+        "_s_SkinVertices4Bones_Tangents_NEON",
+        "_s_SkinVertices4Bones_Tangents1_NEON",
+        "_s_TransformVertices_Strided_XYZ_0_NEON",
+        "_s_TransformVertices_Strided_XYZN_0_NEON",
+        "_s_TransformVertices_Strided_XYZNT_0_NEON",
+        "_MultiplyMatrices4x4_NEON",
+        "_TransposeMatrix4x4_NEON",
+        "_CopyMatrix4x4_NEON",
+    };
+    std::vector<Mod> mods;
+    dl_iterate_phdr(collect, &mods);
+    const Mod* unity = nullptr;
+    for (const auto& m : mods) if (m.name == "libunity.so") unity = &m;
+    if (!unity) throw std::runtime_error("进程里没有 libunity.so");
+
+    std::string out = "# HSRBox —— libunity.so 导出符号探测\n";
+    char b[300];
+    std::snprintf(b, sizeof b, "libunity.so base=%#zx build=%s\n\n%-40s %-14s %-18s %s\n",
+                  size_t(unity->base), unity->buildId.c_str(), "符号", "槽地址", "指向", "落点");
+    out += b;
+
+    size_t found = 0;
+    for (const char* name : kNames) {
+        static std::string why;
+        why.clear();
+        uintptr_t slot = dynSymbol(*unity, name, why);
+        if (!slot) { std::snprintf(b, sizeof b, "%-40s %s\n", name, "未找到"); out += b; continue; }
+        // 槽里存的是函数指针
+        uintptr_t fn = 0;
+        std::memcpy(&fn, reinterpret_cast<const void*>(slot), sizeof(fn));
+        Place where = locate(mods, fn);
+        std::snprintf(b, sizeof b, "%-40s %#010zx %#018zx %s\n",
+                      name, size_t(slot), size_t(fn), where.text.c_str());
+        out += b;
+        if (where.exec) found++;
+    }
+    std::snprintf(b, sizeof b, "\n可用（指向可执行段）%zu / %zu\n", found, sizeof(kNames) / sizeof(kNames[0]));
+    out += b;
+    write(outPath, out);
+    return found;
+}
+
 }  // namespace ms::probe
