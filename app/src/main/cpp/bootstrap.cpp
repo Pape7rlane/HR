@@ -151,7 +151,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
           }
         }
       }
-      try{write(sharedDir(pkg)+"/vertex-buffers.txt",out);}catch(...){}
+      try{ms::write(sharedDir(pkg)+"/vertex-buffers.txt",out);}catch(...){}
       bootLog(pkg,"vertex-capture","已写出 vertex-buffers.txt，"+std::to_string(blobs.size())+" 个缓冲");
       return;}}).detach();
    }
