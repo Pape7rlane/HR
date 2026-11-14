@@ -1,0 +1,1 @@
+<resources><string-array name="xposed_scope"><item>com.miHoYo.hkrpg</item><item>com.miHoYo.hkrpg.bilibili</item><item>com.HoYoverse.hkrpgoversea</item><item>com.hsrbox.tool</item></string-array></resources>
