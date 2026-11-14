@@ -12,5 +12,5 @@
 namespace ms::probe {
 // 写到 path。没有 libil2cpp.so、没有这个导出、或者调用返回 0 都会抛 std::runtime_error 说明原因。
 // 只读：调用 il2cpp_get_api_table() 本身不解引用任何参数。
-void apiTable(const std::string& path);
+void apiTable(const std::string& path, int round = 1);
 }

@@ -5,6 +5,7 @@
 #include <csetjmp>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <dlfcn.h>
 #include <link.h>
 #include <stdexcept>
@@ -142,7 +143,7 @@ Place locate(const std::vector<Mod>& mods, uintptr_t p) {
         for (const auto& s : m.segs) {
             if (p < s.start || p - s.start >= s.size) continue;
             const char* kind = (s.flags & PF_X) ? "text" : (s.flags & PF_W) ? "data" : "rodata";
-            std::snprintf(b, sizeof b, "%s+%#zx/%s", m.name.c_str(), size_t(p - s.start), kind);
+            std::snprintf(b, sizeof b, "%s+%#zx/%s", m.name.c_str(), size_t(p - m.base), kind);
             out.text = b;
             out.readable = true;
             out.exec = (s.flags & PF_X) != 0;
@@ -183,10 +184,16 @@ static std::string g_path;
 
 static void onGuardSignal(int) { if (g_armed) siglongjmp(g_guard, 1); }
 
+static size_t g_written = 0;
 static void flush() {
-    if (!g_path.empty()) {
-        try { write(g_path, g_partial); } catch (...) {}
-    }
+    if (g_path.empty() || g_written >= g_partial.size()) return;
+    try {
+        std::ofstream f(g_path, std::ios::binary | std::ios::app);
+        if (!f) return;
+        f.write(g_partial.data() + g_written, std::streamsize(g_partial.size() - g_written));
+        f.flush();
+        g_written = g_partial.size();
+    } catch (...) {}
 }
 
 static void stage(const char* s) { g_stage = s; }
@@ -200,11 +207,13 @@ static const KnownSymbol kKnown[] = {
 // 跳去 0x6db1c14。注意这里是按 uint32 的值写的，不是十六进制文本的字节顺序。
 static constexpr uint32_t kEntryWord = 0x17ff8ff2u;
 
-void apiTable(const std::string& path) {
+void apiTable(const std::string& path, int round) {
     g_path = path;
     g_partial.clear();
-    g_partial += "# HSRBox —— il2cpp API 表探测\n";
-    g_partial += "# 只读：除了最后调用一次 il2cpp_get_api_table()，不解引用任何游戏数据。\n";
+    g_written = 0;
+    char head[128];
+    std::snprintf(head, sizeof head, "\n===== 第 %d 轮（启动后）=====\n", round);
+    g_partial += head;
 
     auto old = ::signal(SIGSEGV, onGuardSignal);
     if (sigsetjmp(g_guard, 1) != 0) {

@@ -138,9 +138,13 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  // il2cpp API 表探测：不依赖地址表，空表也照样出结果。结果落在 api-table.txt，control.json 里 apiProbe:false 可关。
  // 放在待定检查之前——这条探测的意义就是决定后面走原生 RVA 还是托管调用。
  {bool want=true;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("apiProbe");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
-  if(want){std::this_thread::sleep_for(std::chrono::seconds(2));
-   try{ms::probe::apiTable(sharedDir(pkg)+"/api-table.txt");bootLog(pkg,"api-probe","已写出 api-table.txt");}
-   catch(const std::exception& e){bootLog(pkg,"api-probe-failed",e.what());}}}
+  if(want){
+   // 分三轮：il2cpp 可能还没初始化完，第一次调用崩不代表永远不行。每轮结果都追加进 api-table.txt。
+   for(int round=1;round<=3;round++){
+    std::this_thread::sleep_for(std::chrono::seconds(round==1?15:30));
+    try{ms::probe::apiTable(sharedDir(pkg)+"/api-table.txt",round);
+        bootLog(pkg,"api-probe","第 "+std::to_string(round)+" 轮成功，已写出 api-table.txt");break;}
+    catch(const std::exception& e){bootLog(pkg,"api-probe-failed","第 "+std::to_string(round)+" 轮："+e.what());}}}}
  // UID hiding: hooked only when "hideUid" is on at this start. Each address must be inside an executable segment and
  // start a function body (not a B to elsewhere: hooking a 4-byte wrapper would write over the next method).
  {bool want=false;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();want=c.at("hideUid").type==ms::Json::Bool&&c.at("hideUid").boolean;}catch(const std::exception&){}
