@@ -175,6 +175,22 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
        auto st=ms::gles::stats();
        bootLog(pkg,"gles-stats","第 "+std::to_string(i*5+5)+" 秒：顶点上传 "+std::to_string(st.arrayUploads)+
                " 次，索引 "+std::to_string(st.indexUploads)+" 次，共 "+std::to_string(st.totalBytes/1024)+" KB");
+       // 属性布局：游戏自己声明的 stride/offset，不用猜
+       {auto at=ms::gles::attribs();
+        if(!at.empty()){
+          std::string lay="attrib 声明 "+std::to_string(at.size())+" 条：";
+          for(auto& a:at){
+            char b[160];
+            const char* tn="?";
+            switch(a.type){case 0x1400:tn="BYTE";break;case 0x1401:tn="UBYTE";break;case 0x1402:tn="SHORT";break;
+              case 0x1403:tn="USHORT";break;case 0x1404:tn="INT";break;case 0x1405:tn="UINT";break;
+              case 0x1406:tn="FLOAT";break;case 0x140B:tn="HALF";break;}
+            std::snprintf(b,sizeof b," [%u] %ux%s stride=%u off=%#zx%s",a.index,a.size,tn,a.stride,(size_t)a.offset,a.normalized?" norm":"");
+            lay+=b;
+          }
+          bootLog(pkg,"gles-layout",lay);
+          try{ms::write(sharedDir(pkg)+"/gles-layout.txt",lay);}catch(...){}
+        }}
        auto blobs=ms::gles::take();
        if(blobs.empty())continue;
        done+=blobs.size();

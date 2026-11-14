@@ -18,6 +18,11 @@ constexpr size_t kKeepBlobs = 32;            // 最多留 32 个
 using GlBufferData = void (*)(uint32_t, int64_t, const void*, uint32_t);
 using GlBufferSubData = void (*)(uint32_t, int64_t, int64_t, const void*);
 
+using GlVertexAttribPointer = void (*)(uint32_t, int32_t, uint32_t, uint8_t, int32_t, const void*);
+GlVertexAttribPointer g_attribOrig = nullptr;
+std::mutex g_am;
+std::vector<ms::gles::Attrib> g_attribs;
+
 GlBufferData g_glBufferData = nullptr;
 GlBufferSubData g_glBufferSubData = nullptr;
 GlBufferData g_glBufferDataOrig = nullptr;
@@ -47,6 +52,21 @@ void record(uint32_t target, int64_t size, const void* data) {
     b.bytes = uint32_t(keep);
     b.data.assign(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + keep);
     g_out.push_back(std::move(b));
+}
+
+// 属性声明：去重后留存，最多 64 条。渲染线程里只做短锁 push_back。
+void onAttribPointer(uint32_t index, int32_t size, uint32_t type, uint8_t normalized, int32_t stride, const void* ptr) {
+    if (g_attribs.size() < 64) {
+        std::lock_guard<std::mutex> l(g_am);
+        if (g_attribs.size() < 64) {
+            bool dup = false;
+            for (const auto& a : g_attribs)
+                if (a.index == index && a.size == uint32_t(size) && a.type == type &&
+                    a.stride == uint32_t(stride) && a.offset == uintptr_t(ptr)) { dup = true; break; }
+            if (!dup) g_attribs.push_back({index, uint32_t(size), type, normalized, uint32_t(stride), uintptr_t(ptr)});
+        }
+    }
+    if (g_attribOrig) g_attribOrig(index, size, type, normalized, stride, ptr);
 }
 
 void onBufferData(uint32_t target, int64_t size, const void* data, uint32_t usage) {
@@ -88,6 +108,12 @@ bool install() {
         return false;
     }
 
+    void* vap = dlsym(lib, "glVertexAttribPointer");
+    if (!vap) vap = dlsym(RTLD_DEFAULT, "glVertexAttribPointer");
+    if (vap) {
+        DobbyHook(reinterpret_cast<void*>(vap), reinterpret_cast<dobby_dummy_func_t>(&onAttribPointer),
+                  reinterpret_cast<dobby_dummy_func_t*>(&g_attribOrig));
+    }
     void* bsd = dlsym(lib, "glBufferSubData");
     if (bsd) {
         g_glBufferSubData = reinterpret_cast<GlBufferSubData>(bsd);
@@ -108,6 +134,11 @@ Stats stats() {
     s.installed = g_installed;
     s.detail = g_detail;
     return s;
+}
+
+std::vector<Attrib> attribs() {
+    std::lock_guard<std::mutex> l(g_am);
+    return g_attribs;
 }
 
 std::vector<Blob> take() {
