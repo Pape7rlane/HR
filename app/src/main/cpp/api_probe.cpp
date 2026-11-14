@@ -349,4 +349,65 @@ void apiTable(const std::string& path, int round) {
     flush();
 }
 
+
+// ---------------------------------------------------------------- 内存扫描 metadata
+namespace {
+struct MapRange { uintptr_t start = 0, end = 0; bool anon = false; };
+}
+
+size_t memScanMetadata(const std::string& outPath) {
+    std::ifstream maps("/proc/self/maps");
+    if (!maps) throw std::runtime_error("/proc/self/maps 打不开");
+
+    std::vector<MapRange> ranges;
+    std::string line;
+    size_t scanned = 0, skipped = 0;
+    while (std::getline(maps, line)) {
+        uintptr_t a = 0, b = 0;
+        char perms[8] = {0};
+        if (std::sscanf(line.c_str(), "%zx-%zx %7s", &a, &b, perms) != 3) continue;
+        if (perms[0] != 'r') continue;
+        const size_t len = size_t(b - a);
+        if (!len || len > 512u * 1024 * 1024) { skipped++; continue; }   // 超大区域跳过
+        // 只扫匿名/堆，跳过文件映射（代码、asset、so）
+        auto sp = line.find(' ');
+        std::string path;
+        for (int field = 0; field < 4 && sp != std::string::npos; field++) {
+            if (field == 3) path = line.substr(sp + 1);
+            sp = line.find(' ', sp + 1);
+        }
+        const bool anon = path.empty() || path[0] == '[' || path == "/dev/zero (deleted)";
+        ranges.push_back({a, b, anon});
+    }
+
+    static constexpr uint8_t kMagic[4] = {0xaf, 0x1b, 0xb1, 0xfa};
+    for (const auto& r : ranges) {
+        if (!r.anon) continue;
+        auto* p = reinterpret_cast<const uint8_t*>(r.start);
+        const size_t len = size_t(r.end - r.start);
+        const uint8_t* at = p;
+        const uint8_t* stop = p + len;
+        while (at + 4 <= stop) {
+            const void* hit = memmem(at, size_t(stop - at), kMagic, 4);
+            if (!hit) break;
+            auto* h = static_cast<const uint8_t*>(hit);
+            scanned += size_t(h - at) + 4;
+            // 明文头：magic, version, stringLiteralOffset ...
+            if (h + 32 <= stop) {
+                int32_t version = 0;
+                std::memcpy(&version, h + 4, 4);
+                if (version >= 16 && version <= 40) {
+                    const size_t dumpLen = size_t(stop - h);
+                    std::ofstream f(outPath, std::ios::binary | std::ios::trunc);
+                    if (f) { f.write(reinterpret_cast<const char*>(h), std::streamsize(dumpLen)); f.flush(); }
+                    return f ? dumpLen : 0;
+                }
+            }
+            at = h + 4;
+        }
+    }
+    throw std::runtime_error("内存里没找到明文 metadata（扫了 " + std::to_string(ranges.size()) +
+                             " 个区域，跳过 " + std::to_string(skipped) + " 个超大区域）");
+}
+
 }  // namespace ms::probe

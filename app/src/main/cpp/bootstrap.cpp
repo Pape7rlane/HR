@@ -135,9 +135,17 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  else{bootLog(pkg,"managed-lib","等了 120 秒仍没有 libil2cpp.so");dumpModules(pkg);}
  auto actual=ms::loadedBuildId(image.base,image.ph,image.count,sizeof(ElfW(Phdr)));
  if(!ms::abi::select(actual,managedId)){bootStatus(pkg,"buildid-mismatch","实际 Build ID："+actual);return;}
+ // 内存里找明文 global-metadata.dat：磁盘上那份是 MHY\0 加密的，il2cpp 要用就得先解密进内存，
+ // 直接拿内存里那份，绕开解密逻辑。结果写到 HSRBox 目录下的 global-metadata.dat。
+ {bool want=true;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("memScan");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
+  if(want){std::this_thread::sleep_for(std::chrono::seconds(20));
+   try{const size_t n=ms::probe::memScanMetadata(sharedDir(pkg)+"/global-metadata.dat");
+       bootLog(pkg,"metadata-dump","已从内存 dump "+std::to_string(n)+" 字节到 global-metadata.dat");}
+   catch(const std::exception& e){bootLog(pkg,"metadata-dump-failed",e.what());}}}
+
  // il2cpp API 表探测：不依赖地址表，空表也照样出结果。结果落在 api-table.txt，control.json 里 apiProbe:false 可关。
  // 放在待定检查之前——这条探测的意义就是决定后面走原生 RVA 还是托管调用。
- {bool want=true;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("apiProbe");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
+ {bool want=false;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();auto v=c.at("apiProbe");if(v.type==ms::Json::Bool)want=v.boolean;}catch(const std::exception&){}
   if(want){
    // 分三轮：il2cpp 可能还没初始化完，第一次调用崩不代表永远不行。每轮结果都追加进 api-table.txt。
    for(int round=1;round<=3;round++){

@@ -13,4 +13,9 @@ namespace ms::probe {
 // 写到 path。没有 libil2cpp.so、没有这个导出、或者调用返回 0 都会抛 std::runtime_error 说明原因。
 // 只读：调用 il2cpp_get_api_table() 本身不解引用任何参数。
 void apiTable(const std::string& path, int round = 1);
+
+// 在进程内存里找明文 global-metadata.dat（magic AF 1B B1 FA），找到就写到 outPath。
+// 磁盘上那份是 MHY\0 加密的，但 il2cpp 要用它就必须先解密进内存——直接拿内存里的那份，
+// 不用去啃解密循环。返回 dump 出来的字节数，0 表示没找到。
+size_t memScanMetadata(const std::string& outPath);
 }
