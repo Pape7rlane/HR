@@ -46,4 +46,7 @@ std::vector<Attrib> attribs();
 // 写权限验证：命中多少次数（0 表示那个尺寸的缓冲没出现）
 uint64_t patchHits();
 
+// 每个顶点缓冲被画了几次（= 子网格数），指纹的第二个数字
+std::vector<std::pair<uint64_t,uint32_t>> drawCounts();
+
 }  // namespace ms::gles

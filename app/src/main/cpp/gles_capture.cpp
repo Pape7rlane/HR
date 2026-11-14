@@ -6,6 +6,7 @@
 #include "dobby.h"
 #include <link.h>
 #include <mutex>
+#include <unordered_map>
 
 namespace {
 
@@ -22,6 +23,14 @@ using GlVertexAttribPointer = void (*)(uint32_t, int32_t, uint32_t, uint8_t, int
 using GlMapBufferRange = void* (*)(uint32_t, int64_t, int64_t, uint32_t);
 using GlMapBuffer = void* (*)(uint32_t, uint32_t);
 using GlUnmapBuffer = uint8_t (*)(uint32_t);
+using GlDrawElements = void (*)(uint32_t, int32_t, uint32_t, const void*);
+using GlBindBuffer = void (*)(uint32_t, uint32_t);
+
+GlDrawElements g_drawOrig = nullptr;
+GlBindBuffer g_bindOrig = nullptr;
+std::atomic<uint64_t> g_boundArrayBuffer{0};      // 当前绑定的 ARRAY_BUFFER
+std::mutex g_dm;
+std::unordered_map<uint64_t, uint32_t> g_drawCount;   // buffer -> 被画了几次
 
 GlMapBufferRange g_mapRangeOrig = nullptr;
 GlMapBuffer g_mapOrig = nullptr;
@@ -116,6 +125,22 @@ uint8_t onUnmapBuffer(uint32_t target) {
     return g_unmapOrig ? g_unmapOrig(target) : 1;
 }
 
+// glBindBuffer：记住当前绑定的顶点缓冲，绘制时才能归属
+void onBindBuffer(uint32_t target, uint32_t buffer) {
+    if (target == kArrayBuffer) g_boundArrayBuffer.store(buffer, std::memory_order_relaxed);
+    if (g_bindOrig) g_bindOrig(target, buffer);
+}
+
+// glDrawElements：子网格数就是同一个缓冲被画的次数
+void onDrawElements(uint32_t mode, int32_t count, uint32_t type, const void* indices) {
+    uint64_t buf = g_boundArrayBuffer.load(std::memory_order_relaxed);
+    if (buf) {
+        std::lock_guard<std::mutex> l(g_dm);
+        if (g_drawCount.size() < 4096) g_drawCount[buf] += 1;
+    }
+    if (g_drawOrig) g_drawOrig(mode, count, type, indices);
+}
+
 void onBufferData(uint32_t target, int64_t size, const void* data, uint32_t usage) {
     record(target, size, data);
     if (target == kArrayBuffer && size == kProbeSize && data &&
@@ -164,6 +189,12 @@ bool install() {
         return false;
     }
 
+    void* de = dlsym(lib, "glDrawElements");
+    if (de) DobbyHook(de, reinterpret_cast<dobby_dummy_func_t>(&onDrawElements),
+                      reinterpret_cast<dobby_dummy_func_t*>(&g_drawOrig));
+    void* bb = dlsym(lib, "glBindBuffer");
+    if (bb) DobbyHook(bb, reinterpret_cast<dobby_dummy_func_t>(&onBindBuffer),
+                      reinterpret_cast<dobby_dummy_func_t*>(&g_bindOrig));
     void* mpr = dlsym(lib, "glMapBufferRange");
     if (mpr) DobbyHook(mpr, reinterpret_cast<dobby_dummy_func_t>(&onMapBufferRange),
                        reinterpret_cast<dobby_dummy_func_t*>(&g_mapRangeOrig));
@@ -202,6 +233,12 @@ Stats stats() {
 }
 
 uint64_t patchHits() { return g_patchHits.load(std::memory_order_relaxed); }
+
+std::vector<std::pair<uint64_t,uint32_t>> drawCounts() {
+    std::lock_guard<std::mutex> l(g_dm);
+    std::vector<std::pair<uint64_t,uint32_t>> r(g_drawCount.begin(), g_drawCount.end());
+    return r;
+}
 
 std::vector<Attrib> attribs() {
     std::lock_guard<std::mutex> l(g_am);
