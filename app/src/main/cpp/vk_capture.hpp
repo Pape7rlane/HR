@@ -138,6 +138,8 @@ public:
  void installed(bool ok,const std::string& error){std::lock_guard<std::mutex> l(m);st.installed=ok;st.error=error;enabled=ok;}
  std::vector<Blob> take(){std::lock_guard<std::mutex> l(m);std::vector<Blob> r;r.swap(out);return r;}
  std::vector<VertexBlob> takeVertex(){std::lock_guard<std::mutex> l(m);std::vector<VertexBlob> r;r.swap(vertexOut);return r;}
+ // 有几个 buffer、其中几个是 vertex usage —— 用来判断 Vulkan 到底有没有被用。
+ std::pair<size_t,size_t> counts(){std::lock_guard<std::mutex> l(m);size_t v=0;for(const auto& kv:buffers)if(kv.second.isVertex)v++;return {buffers.size(),v};}
  Stats stats(){std::lock_guard<std::mutex> l(m);return st;}
 };
 inline Tracker& tracker(){static Tracker t;return t;}
