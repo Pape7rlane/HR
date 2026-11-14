@@ -352,7 +352,7 @@ void apiTable(const std::string& path, int round) {
 
 // ---------------------------------------------------------------- 内存扫描 metadata
 namespace {
-struct MapRange { uintptr_t start = 0, end = 0; bool anon = false; };
+struct MapRange { uintptr_t start = 0, end = 0; bool anon = false; bool exec = false; std::string path; };
 }
 
 size_t memScanMetadata(const std::string& outPath) {
@@ -375,9 +375,9 @@ size_t memScanMetadata(const std::string& outPath) {
         std::string p(path);
         const auto s0 = p.find_first_not_of(" \t");
         p = s0 == std::string::npos ? std::string() : p.substr(s0);
-        // 只扫匿名区域：没有路径，或者 [anon:...] / [heap] / [stack] 这类
         const bool anon = p.empty() || p[0] == '[' || p.rfind("/dev/zero", 0) == 0;
-        ranges.push_back({a, b, anon});
+        const bool exec = perms[2] == 'x';
+        ranges.push_back({a, b, anon, exec, p});
     }
 
     // 从读 maps 到真正访问之间，这些区域可能已经被释放；踩上去就是 SIGSEGV，而这里没有 apiTable 那层保护。
@@ -386,8 +386,13 @@ size_t memScanMetadata(const std::string& outPath) {
     size_t totalBytes = 0, anonRegions = 0, crashed = 0;
     static constexpr uint8_t kMagic[4] = {0xaf, 0x1b, 0xb1, 0xfa};
     for (const auto& r : ranges) {
-        if (!r.anon) continue;
-        if (size_t(r.end - r.start) < 1024 * 1024) continue;   // 小于 1 MB 的跳过：metadata 一百多 MB，不必去碰碎片
+        if (r.exec) continue;                                   // 代码段跳过
+        // 系统库/框架的只读映射也不用碰
+        static const char* const kSkip[] = {"/system/", "/apex/", "/vendor/", "/product/", "/odm/", "/system_ext/"};
+        bool skip = false;
+        for (const char* pre : kSkip) if (!r.path.empty() && r.path.rfind(pre, 0) == 0) { skip = true; break; }
+        if (skip) continue;
+        if (size_t(r.end - r.start) < 256 * 1024) continue;     // 碎片不要
         if (sigsetjmp(g_guard, 1) != 0) { g_armed = 0; crashed++; continue; }
         g_armed = 1;
         anonRegions++;
