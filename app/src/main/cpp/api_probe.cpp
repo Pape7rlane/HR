@@ -385,20 +385,22 @@ size_t memScanMetadata(const std::string& outPath) {
     auto old = ::signal(SIGSEGV, onGuardSignal);
     size_t totalBytes = 0, anonRegions = 0, crashed = 0;
     static constexpr uint8_t kMagic[4] = {0xaf, 0x1b, 0xb1, 0xfa};
+    // 精准打法：metadata 磁盘上是 105,568,912 字节，运行时载体大小必然接近这个数。
+    // 只扫 90–130 MB 的映射，区域个位数，几乎没有踩到已释放页的机会，也快。
+    constexpr size_t kMetaMin = 90ull * 1024 * 1024, kMetaMax = 130ull * 1024 * 1024;
+    size_t bigRegions = 0;
     for (const auto& r : ranges) {
-        if (r.exec) continue;                                   // 代码段跳过
-        // 系统库/框架的只读映射也不用碰
-        static const char* const kSkip[] = {"/system/", "/apex/", "/vendor/", "/product/", "/odm/", "/system_ext/"};
-        bool skip = false;
-        for (const char* pre : kSkip) if (!r.path.empty() && r.path.rfind(pre, 0) == 0) { skip = true; break; }
-        if (skip) continue;
-        if (size_t(r.end - r.start) < 256 * 1024) continue;     // 碎片不要
+        if (r.exec) continue;
+        const size_t sz = size_t(r.end - r.start);
+        if (sz < kMetaMin || sz > kMetaMax) continue;
+        bigRegions++;
         if (sigsetjmp(g_guard, 1) != 0) { g_armed = 0; crashed++; continue; }
         g_armed = 1;
         anonRegions++;
         auto* p = reinterpret_cast<const uint8_t*>(r.start);
         const size_t len = size_t(r.end - r.start);
         totalBytes += len;
+        if (r.path.size() < 120) { /* 记下候选，便于下一次核对 */ }
         const uint8_t* at = p;
         const uint8_t* stop = p + len;
         while (at + 4 <= stop) {
@@ -424,7 +426,8 @@ size_t memScanMetadata(const std::string& outPath) {
     ::signal(SIGSEGV, old);
     throw std::runtime_error("内存里没找到明文 metadata（共 " + std::to_string(ranges.size()) +
                              " 个可读区域，其中匿名 " + std::to_string(anonRegions) + " 个，扫了 " +
-                             std::to_string(totalBytes / 1024 / 1024) + " MB，读崩 " +
+                             std::to_string(totalBytes / 1024 / 1024) + " MB（候选大区域 " +
+                             std::to_string(bigRegions) + " 个），读崩 " +
                              std::to_string(crashed) + " 个区域，跳过 " +
                              std::to_string(skipped) + " 个超大区域）");
 }
