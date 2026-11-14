@@ -361,38 +361,39 @@ size_t memScanMetadata(const std::string& outPath) {
 
     std::vector<MapRange> ranges;
     std::string line;
-    size_t scanned = 0, skipped = 0;
+    size_t skipped = 0;
     while (std::getline(maps, line)) {
         uintptr_t a = 0, b = 0;
-        char perms[8] = {0};
-        if (std::sscanf(line.c_str(), "%zx-%zx %7s", &a, &b, perms) != 3) continue;
+        unsigned long long off = 0, inode = 0;
+        char perms[8] = {0}, dev[16] = {0}, path[1024] = {0};
+        // 一次解析完：地址 权限 偏移 dev inode 路径。路径是第 5 个字段后的整段。
+        if (std::sscanf(line.c_str(), "%zx-%zx %7s %llx %15s %llu %1023[^\n]",
+                        &a, &b, perms, &off, dev, &inode, path) < 6) continue;
         if (perms[0] != 'r') continue;
         const size_t len = size_t(b - a);
         if (!len || len > 512u * 1024 * 1024) { skipped++; continue; }   // 超大区域跳过
-        // 只扫匿名/堆，跳过文件映射（代码、asset、so）
-        auto sp = line.find(' ');
-        std::string path;
-        for (int field = 0; field < 4 && sp != std::string::npos; field++) {
-            if (field == 3) path = line.substr(sp + 1);
-            sp = line.find(' ', sp + 1);
-        }
-        const bool anon = path.empty() || path[0] == '[' || path == "/dev/zero (deleted)";
+        std::string p(path);
+        const auto s0 = p.find_first_not_of(" \t");
+        p = s0 == std::string::npos ? std::string() : p.substr(s0);
+        // 只扫匿名区域：没有路径，或者 [anon:...] / [heap] / [stack] 这类
+        const bool anon = p.empty() || p[0] == '[' || p.rfind("/dev/zero", 0) == 0;
         ranges.push_back({a, b, anon});
     }
 
+    size_t totalBytes = 0, anonRegions = 0;
     static constexpr uint8_t kMagic[4] = {0xaf, 0x1b, 0xb1, 0xfa};
     for (const auto& r : ranges) {
         if (!r.anon) continue;
+        anonRegions++;
         auto* p = reinterpret_cast<const uint8_t*>(r.start);
         const size_t len = size_t(r.end - r.start);
+        totalBytes += len;
         const uint8_t* at = p;
         const uint8_t* stop = p + len;
         while (at + 4 <= stop) {
             const void* hit = memmem(at, size_t(stop - at), kMagic, 4);
             if (!hit) break;
             auto* h = static_cast<const uint8_t*>(hit);
-            scanned += size_t(h - at) + 4;
-            // 明文头：magic, version, stringLiteralOffset ...
             if (h + 32 <= stop) {
                 int32_t version = 0;
                 std::memcpy(&version, h + 4, 4);
@@ -406,8 +407,10 @@ size_t memScanMetadata(const std::string& outPath) {
             at = h + 4;
         }
     }
-    throw std::runtime_error("内存里没找到明文 metadata（扫了 " + std::to_string(ranges.size()) +
-                             " 个区域，跳过 " + std::to_string(skipped) + " 个超大区域）");
+    throw std::runtime_error("内存里没找到明文 metadata（共 " + std::to_string(ranges.size()) +
+                             " 个可读区域，其中匿名 " + std::to_string(anonRegions) + " 个，扫了 " +
+                             std::to_string(totalBytes / 1024 / 1024) + " MB，跳过 " +
+                             std::to_string(skipped) + " 个超大区域）");
 }
 
 }  // namespace ms::probe
