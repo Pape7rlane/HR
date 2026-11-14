@@ -112,7 +112,6 @@ std::string buildIdOf(uintptr_t base, const ElfW(Phdr)* ph, size_t n) {
     }
     return "";
 }
-}  // namespace
 
 // 在指定模块的 .dynsym 里按名字找符号，返回运行时地址；找不到返回 0。
 // 为什么不直接用 dlsym：崩铁的 so 是 android_dlopen_ext 加进它自己的 linker namespace 的，
