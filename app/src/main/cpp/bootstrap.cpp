@@ -195,6 +195,13 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
        if(!blobs.empty())done+=blobs.size();
        {auto h=ms::gles::patchHits();
         if(h>0)bootLog(pkg,"gles-patch","已改写 25800 字节缓冲的首顶点 x+0.5（共 "+std::to_string(h)+" 次）");}
+       // 指纹：每个顶点缓冲被画了几次（子网格数）
+       {auto dc=ms::gles::drawCounts();
+        bootLog(pkg,"gles-draws","有绘制记录的缓冲 "+std::to_string(dc.size())+" 个");
+        std::string out="# HSRBox —— 每个顶点缓冲的绘制次数\n# buffer_handle drawCount\n";
+        char b[96];
+        for(auto& kv:dc){std::snprintf(b,sizeof b,"%llx %u\n",(unsigned long long)kv.first,kv.second);out+=b;}
+        try{ms::write(sharedDir(pkg)+"/gles-draws.txt",out);}catch(...){}}
        if(blobs.empty())continue;
        // 存原始字节：步长和偏移得靠统计才能定，文本里 3 个顶点不够。
        for(auto& v:blobs){
