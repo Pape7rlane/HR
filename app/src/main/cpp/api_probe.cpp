@@ -493,6 +493,8 @@ size_t probeUnitySymbols(const std::string& outPath) {
 // ---------------------------------------------------------------- 蒙皮计数
 namespace {
 std::atomic<uint64_t> g_skinCalls{0};
+constexpr int kSlotCount = 6;
+std::atomic<uint64_t> g_slotCalls[kSlotCount];
 std::atomic<bool> g_captureWanted{false};
 std::atomic<bool> g_captureDone{false};
 struct Sample {
@@ -513,8 +515,9 @@ int g_hooked = 0;
 template <int N>
 void skinTrampoline(void* a, void* b, void* c, void* d, void* e, void* f, void* g, void* h) {
     g_skinCalls.fetch_add(1, std::memory_order_relaxed);
+    if (N < kSlotCount) g_slotCalls[N].fetch_add(1, std::memory_order_relaxed);
     // 渲染线程里只做 memcpy，绝不碰文件、不分配内存、不加锁。
-    if (g_captureWanted.load(std::memory_order_relaxed) && !g_captureDone.load(std::memory_order_relaxed)) {
+    if (N <= 3 && g_captureWanted.load(std::memory_order_relaxed) && !g_captureDone.load(std::memory_order_relaxed)) {
         if (g_captureWanted.exchange(false, std::memory_order_relaxed)) {
             g_sample.slot = N;
             g_sample.baseA = uintptr_t(a);
@@ -569,6 +572,21 @@ size_t hookSkinning() {
 }
 
 uint64_t skinCallCount() { return g_skinCalls.load(std::memory_order_relaxed); }
+
+std::string slotCallReport() {
+    static const char* const kNames[] = {
+        "_s_SkinVertices_NEON", "_s_SkinVertices4Bones_NEON", "_s_SkinVertices2Bones_NEON",
+        "_s_TransformVertices_Strided_XYZN_0_NEON", "_s_TransformVertices_Strided_XYZ_0_NEON",
+        "_MultiplyMatrices4x4_NEON"};
+    std::string out;
+    for (int i = 0; i < kSlotCount; i++) {
+        char b[128];
+        std::snprintf(b, sizeof b, "%s=%llu ", kNames[i],
+                      (unsigned long long)g_slotCalls[i].load(std::memory_order_relaxed));
+        out += b;
+    }
+    return out;
+}
 
 void startVertexCapture(const std::string& outPath) {
     g_capturePath = outPath;

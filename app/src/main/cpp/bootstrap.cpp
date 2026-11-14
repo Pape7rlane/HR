@@ -147,7 +147,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
   if(want){try{const size_t n=ms::probe::hookSkinning();
        bootLog(pkg,"skin-hook","挂上 "+std::to_string(n)+" 个蒙皮函数，开始计数");
        std::thread([pkg]{for(int i=1;i<=6;i++){std::this_thread::sleep_for(std::chrono::seconds(10));
-         bootLog(pkg,"skin-count","第 "+std::to_string(i*10)+" 秒累计调用 "+std::to_string(ms::probe::skinCallCount())+" 次");}}).detach();
+         bootLog(pkg,"skin-count","第 "+std::to_string(i*10)+" 秒累计 "+std::to_string(ms::probe::skinCallCount())+" 次 | "+ms::probe::slotCallReport());}}).detach();
        // 15 秒后采一次顶点样（只读），搞清顶点流布局
        std::thread([pkg]{std::this_thread::sleep_for(std::chrono::seconds(15));
          ms::probe::startVertexCapture(sharedDir(pkg)+"/vertex-sample.txt");
