@@ -169,6 +169,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
      if(!ms::gles::install()){bootLog(pkg,"gles-capture-failed",ms::gles::stats().detail);return;}
      bootLog(pkg,"gles-capture","已挂钩 "+ms::gles::stats().detail);
      size_t done=0;
+     try{std::filesystem::create_directories(sharedDir(pkg)+"/gles-raw");}catch(...){}
      for(int i=0;i<30;i++){
        std::this_thread::sleep_for(std::chrono::seconds(5));
        auto st=ms::gles::stats();
@@ -177,6 +178,11 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
        auto blobs=ms::gles::take();
        if(blobs.empty())continue;
        done+=blobs.size();
+       // 存原始字节：步长和偏移得靠统计才能定，文本里 3 个顶点不够。
+       for(auto& v:blobs){
+         try{ms::write(sharedDir(pkg)+"/gles-raw/"+std::to_string(v.seq)+"_"+std::to_string(v.declared)+".bin",
+                       v.data.data(),v.data.size());}catch(...){}
+       }
        std::string out="# HSRBox —— GLES 顶点缓冲\n";
        char b[256];
        for(auto& v:blobs){
