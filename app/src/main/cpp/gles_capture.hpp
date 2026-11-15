@@ -54,6 +54,10 @@ std::vector<int64_t> batchHits();
 // 从客户端内存指针读到的顶点缓冲数
 int clientCaptured();
 
+// 客户端指针本身和步长（只记录，读内存要另外小心）
+intptr_t clientPtr();
+int clientStride();
+
 // seq -> (handle, bytes)，拿到就能和 gles-draws.txt 的 handle 对上
 std::vector<std::tuple<uint64_t,uint64_t,uint32_t>> blobMap();
 

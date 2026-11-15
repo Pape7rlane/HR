@@ -202,7 +202,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
           for(size_t k=0;k<bh.size()&&k<30;k++){std::snprintf(b2,sizeof b2," %lld",(long long)bh[k]);s2+=b2;}
           bootLog(pkg,"gles-batch",s2);}}
        {int cc=ms::gles::clientCaptured();
-        if(cc>0)bootLog(pkg,"gles-client","从客户端内存指针读到 "+std::to_string(cc)+" 块顶点数据");}
+        if(cc>0){
+          char b3[160];
+          std::snprintf(b3,sizeof b3,"客户端指针路径被调用 %d 次，地址 %#zx stride %d",cc,(size_t)ms::gles::clientPtr(),ms::gles::clientStride());
+          bootLog(pkg,"gles-client",b3);}}
        // 指纹：每个顶点缓冲被画了几次（子网格数）
        {auto dc=ms::gles::drawCounts();
         bootLog(pkg,"gles-draws","有绘制记录的缓冲 "+std::to_string(dc.size())+" 个");

@@ -153,15 +153,9 @@ void onBindBuffer(uint32_t target, uint32_t buffer) {
 
 // glDrawElements：子网格数就是同一个缓冲被画的次数
 void onDrawElements(uint32_t mode, int32_t count, uint32_t type, const void* indices) {
-    // 客户端指针路径：直接读游戏内存里的顶点
-    if (g_clientPtr && g_clientStride > 0 && count > 0 &&
-        g_clientCaptured.load(std::memory_order_relaxed) < kClientLimit) {
-        size_t n = size_t(count) * size_t(g_clientStride);
-        if (n > (1u << 20)) n = 1u << 20;
-        if (n >= kMinDeclared) {
-            g_clientCaptured.fetch_add(1, std::memory_order_relaxed);
-            record(kArrayBuffer, int64_t(n), reinterpret_cast<const void*>(g_clientPtr));
-        }
+    // 客户端指针只记次数，不读内存 —— 那个地址随时可能失效，读了会卡死加载。
+    if (g_clientPtr && g_clientStride > 0 && count > 0) {
+        g_clientCaptured.fetch_add(1, std::memory_order_relaxed);
     }
     uint64_t buf = g_boundArrayBuffer.load(std::memory_order_relaxed);
     if (buf) {
@@ -277,6 +271,8 @@ Stats stats() {
 uint64_t patchHits() { return g_patchHits.load(std::memory_order_relaxed); }
 
 int clientCaptured() { return g_clientCaptured.load(std::memory_order_relaxed); }
+intptr_t clientPtr() { return intptr_t(g_clientPtr); }
+int clientStride() { return g_clientStride; }
 
 std::vector<int64_t> batchHits() {
     std::lock_guard<std::mutex> l(g_bm);
