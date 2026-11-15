@@ -48,6 +48,9 @@ std::vector<Attrib> attribs();
 // 写权限验证：命中多少次数（0 表示那个尺寸的缓冲没出现）
 uint64_t patchHits();
 
+// 批量试探命中的缓冲尺寸，按顺序
+std::vector<int64_t> batchHits();
+
 // seq -> (handle, bytes)，拿到就能和 gles-draws.txt 的 handle 对上
 std::vector<std::tuple<uint64_t,uint64_t,uint32_t>> blobMap();
 

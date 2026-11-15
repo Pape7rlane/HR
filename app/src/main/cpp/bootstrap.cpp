@@ -195,6 +195,12 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
        if(!blobs.empty())done+=blobs.size();
        {auto h=ms::gles::patchHits();
         if(h>0)bootLog(pkg,"gles-patch","已改写 25800 字节缓冲的首顶点 x+0.5（共 "+std::to_string(h)+" 次）");}
+       {auto bh=ms::gles::batchHits();
+        if(!bh.empty()){
+          std::string s2="批量改写 "+std::to_string(bh.size())+" 个缓冲：";
+          char b2[64];
+          for(size_t k=0;k<bh.size()&&k<30;k++){std::snprintf(b2,sizeof b2," %lld",(long long)bh[k]);s2+=b2;}
+          bootLog(pkg,"gles-batch",s2);}}
        // 指纹：每个顶点缓冲被画了几次（子网格数）
        {auto dc=ms::gles::drawCounts();
         bootLog(pkg,"gles-draws","有绘制记录的缓冲 "+std::to_string(dc.size())+" 个");

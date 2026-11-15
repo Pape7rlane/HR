@@ -39,7 +39,13 @@ GlUnmapBuffer g_unmapOrig = nullptr;
 uint32_t g_mapTarget = 0;
 std::atomic<bool> g_patched{false};      // 实验：只改一次
 std::atomic<uint64_t> g_patchHits{0};
-constexpr int64_t kProbeSize = 25800;    // 647_25800.bin 的字节数
+constexpr int64_t kProbeSize = 25800;    // 第一轮试过的尺寸
+// 批量试探：500~60000 顶点（6000~720000 字节）的主体网格，每个改首顶点
+constexpr int64_t kBatchMin = 6000, kBatchMax = 720000;
+constexpr int kBatchLimit = 30;
+std::atomic<int> g_batchCount{0};
+std::mutex g_bm;
+std::vector<int64_t> g_batchHit;
 void* g_mapPtr = nullptr;
 int64_t g_mapLen = 0;
 GlVertexAttribPointer g_attribOrig = nullptr;
@@ -146,6 +152,18 @@ void onDrawElements(uint32_t mode, int32_t count, uint32_t type, const void* ind
 
 void onBufferData(uint32_t target, int64_t size, const void* data, uint32_t usage) {
     record(target, size, data);
+    // 批量试探：主体网格每个改一处，命中就记下尺寸
+    if (target == kArrayBuffer && size >= kBatchMin && size <= kBatchMax && data &&
+        g_batchCount.load(std::memory_order_relaxed) < kBatchLimit) {
+        int n = g_batchCount.fetch_add(1, std::memory_order_relaxed);
+        if (n < kBatchLimit) {
+            std::vector<uint8_t> mod(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + size);
+            reinterpret_cast<float*>(mod.data())[0] += 0.5f;
+            {std::lock_guard<std::mutex> l(g_bm); g_batchHit.push_back(size);}
+            if (g_glBufferDataOrig) g_glBufferDataOrig(target, size, mod.data(), usage);
+            return;
+        }
+    }
     if (target == kArrayBuffer && size == kProbeSize && data &&
         !g_patched.load(std::memory_order_relaxed)) {
         g_patched.store(true, std::memory_order_relaxed);
@@ -236,6 +254,11 @@ Stats stats() {
 }
 
 uint64_t patchHits() { return g_patchHits.load(std::memory_order_relaxed); }
+
+std::vector<int64_t> batchHits() {
+    std::lock_guard<std::mutex> l(g_bm);
+    return g_batchHit;
+}
 
 std::vector<std::tuple<uint64_t,uint64_t,uint32_t>> blobMap() {
     std::lock_guard<std::mutex> l(g_m);
