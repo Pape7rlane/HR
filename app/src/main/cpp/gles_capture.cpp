@@ -53,6 +53,12 @@ std::mutex g_am;
 std::vector<ms::gles::Attrib> g_attribs;
 ms::gles::Attrib g_state[16];      // 按 index 记录当前声明
 bool g_stateUsed[16] = {false};
+// 客户端内存指针：offset 参数大到不可能是缓冲内偏移，说明顶点数据在游戏内存里，
+// 完全绕过 glBufferData —— 这很可能就是角色网格走的路。
+uintptr_t g_clientPtr = 0;
+int32_t g_clientStride = 0;
+std::atomic<int> g_clientCaptured{0};
+constexpr int kClientLimit = 24;
 
 GlBufferData g_glBufferData = nullptr;
 GlBufferSubData g_glBufferSubData = nullptr;
@@ -105,6 +111,11 @@ void onAttribPointer(uint32_t index, int32_t size, uint32_t type, uint8_t normal
         g_state[index] = {index, uint32_t(size), type, normalized, uint32_t(stride), uintptr_t(ptr)};
         g_stateUsed[index] = true;
     }
+    // index 0 是位置；地址大到不可能是偏移就是客户端指针
+    if (index == 0 && uintptr_t(ptr) > 0x10000 && stride > 0) {
+        g_clientPtr = uintptr_t(ptr);
+        g_clientStride = stride;
+    }
     if (g_attribOrig) g_attribOrig(index, size, type, normalized, stride, ptr);
 }
 
@@ -142,6 +153,16 @@ void onBindBuffer(uint32_t target, uint32_t buffer) {
 
 // glDrawElements：子网格数就是同一个缓冲被画的次数
 void onDrawElements(uint32_t mode, int32_t count, uint32_t type, const void* indices) {
+    // 客户端指针路径：直接读游戏内存里的顶点
+    if (g_clientPtr && g_clientStride > 0 && count > 0 &&
+        g_clientCaptured.load(std::memory_order_relaxed) < kClientLimit) {
+        size_t n = size_t(count) * size_t(g_clientStride);
+        if (n > (1u << 20)) n = 1u << 20;
+        if (n >= kMinDeclared) {
+            g_clientCaptured.fetch_add(1, std::memory_order_relaxed);
+            record(kArrayBuffer, int64_t(n), reinterpret_cast<const void*>(g_clientPtr));
+        }
+    }
     uint64_t buf = g_boundArrayBuffer.load(std::memory_order_relaxed);
     if (buf) {
         std::lock_guard<std::mutex> l(g_dm);
@@ -254,6 +275,8 @@ Stats stats() {
 }
 
 uint64_t patchHits() { return g_patchHits.load(std::memory_order_relaxed); }
+
+int clientCaptured() { return g_clientCaptured.load(std::memory_order_relaxed); }
 
 std::vector<int64_t> batchHits() {
     std::lock_guard<std::mutex> l(g_bm);
