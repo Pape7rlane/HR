@@ -3,6 +3,8 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <unistd.h>
+#include <csignal>
+#include <csetjmp>
 #include "dobby.h"
 #include <link.h>
 #include <mutex>
@@ -58,7 +60,10 @@ bool g_stateUsed[16] = {false};
 uintptr_t g_clientPtr = 0;
 int32_t g_clientStride = 0;
 std::atomic<int> g_clientCaptured{0};
-constexpr int kClientLimit = 24;
+constexpr int kClientLimit = 10;
+sigjmp_buf g_jmp;
+volatile bool g_inGuard = false;
+static void segvCatch(int) { if (g_inGuard) siglongjmp(g_jmp, 1); }
 
 GlBufferData g_glBufferData = nullptr;
 GlBufferSubData g_glBufferSubData = nullptr;
@@ -115,6 +120,19 @@ void onAttribPointer(uint32_t index, int32_t size, uint32_t type, uint8_t normal
     if (index == 0 && uintptr_t(ptr) > 0x10000 && stride > 0) {
         g_clientPtr = uintptr_t(ptr);
         g_clientStride = stride;
+        // 这一刻数据必然有效（游戏刚交给我们），立刻取一份。
+        // 之前放在 draw 时读，那时内存可能已被回收，直接把加载卡死。
+        if (g_clientCaptured.load(std::memory_order_relaxed) < kClientLimit) {
+            int n = g_clientCaptured.fetch_add(1, std::memory_order_relaxed);
+            if (n < kClientLimit) {
+                const size_t want = 4096;
+                if (sigsetjmp(g_jmp, 1) == 0) {
+                    g_inGuard = true;
+                    record(kArrayBuffer, int64_t(want), reinterpret_cast<const void*>(ptr));
+                    g_inGuard = false;
+                }
+            }
+        }
     }
     if (g_attribOrig) g_attribOrig(index, size, type, normalized, stride, ptr);
 }
@@ -206,6 +224,12 @@ namespace ms::gles {
 
 bool install() {
     if (g_installed) return true;
+    struct sigaction sa{};
+    sa.sa_handler = segvCatch;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_NODEFER;
+    sigaction(SIGSEGV, &sa, nullptr);
+    sigaction(SIGBUS, &sa, nullptr);
     // libGLESv2.so 由 EGL 在创建上下文时加载，等它出现。
     void* lib = nullptr;
     for (int i = 0; i < 240 && !lib; i++) {

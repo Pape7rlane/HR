@@ -16,8 +16,8 @@ android {
         applicationId = "com.hsrbox.tool"
         minSdk = 26
         targetSdk = 34
-        versionCode = 48
-        versionName = "0.10.3"
+        versionCode = 49
+        versionName = "0.10.4"
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild {
             cmake {
