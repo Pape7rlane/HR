@@ -72,7 +72,7 @@ uint32_t codeMask(uint32_t w){
  if((w&0x3B000000)==0x39000000&&((w>>5)&31)!=31)return 0xFFC003FF;
  if((w&0x7F800000)==0x11000000&&((w>>5)&31)!=31)return 0xFFC003FF;
  return 0xFFFFFFFF;}
-bool codeMatches(uintptr_t base,const ms::abi::CodeCheck& c){if(!c.hex||!*c.hex)return true;   // 这一版没录入口字节：只做地址检查
+bool codeMatches(uintptr_t base,const ms::abi::CodeCheck& c){if(!c.hex||!*c.hex)return true;   // base 必须是该项所在库的基址   // 这一版没录入口字节：只做地址检查
  auto rva=ms::abi::at(c.rva);if(!ms::abi::found(rva))return false;auto* p=reinterpret_cast<const unsigned char*>(base+rva);auto digit=[](char x){return x<='9'?x-'0':x-'a'+10;};
  for(size_t i=0;i<16;i+=4){uint32_t want=0,got=0;for(size_t b=0;b<4;b++){want|=uint32_t(digit(c.hex[2*(i+b)])*16+digit(c.hex[2*(i+b)+1]))<<(8*b);got|=uint32_t(p[i+b])<<(8*b);}
   uint32_t m=codeMask(want);if((want&m)!=(got&m))return false;}
@@ -282,6 +282,12 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  if(managed.base){managedId=ms::loadedBuildId(managed.base,managed.ph,managed.count,sizeof(ElfW(Phdr)));
   bootLog(pkg,"managed-lib",managed.name+" Build ID "+managedId);}
  else{bootLog(pkg,"managed-lib","等了 120 秒仍没有 libil2cpp.so");dumpModules(pkg);}
+ // 引擎库与托管库分开加载：按 libOf 选基址，别一律用 image.base。
+ // （image 是 libunity.so，managed 是 libil2cpp.so；Unity 的托管方法都在后者里面。）
+ const uintptr_t engineBase=image.base, managedBase=managed.base;
+ auto baseFor=[&](ms::abi::Offset o)->uintptr_t{return ms::abi::libOf(o)==ms::abi::Lib::Managed?managedBase:engineBase;};
+ auto imgFor=[&](ms::abi::Offset o)->const Image&{return ms::abi::libOf(o)==ms::abi::Lib::Managed?managed:image;};
+ auto addrOf=[&](ms::abi::Offset o)->uintptr_t{return baseFor(o)+ms::abi::at(o);};
  auto actual=ms::loadedBuildId(image.base,image.ph,image.count,sizeof(ElfW(Phdr)));
  if(!ms::abi::select(actual,managedId)){bootStatus(pkg,"buildid-mismatch","实际 Build ID："+actual);return;}
  // libunity.so 的导出符号探测：那批 _s_SkinVertices* / _s_TransformVertices* 是真实导出的函数指针，
@@ -331,13 +337,16 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  // start a function body (not a B to elsewhere: hooking a 4-byte wrapper would write over the next method).
  {bool want=false;try{auto c=ms::JsonParser(ms::text(sharedDir(pkg)+"/control.json")).parse();want=c.at("hideUid").type==ms::Json::Bool&&c.at("hideUid").boolean;}catch(const std::exception&){}
   if(want){ms::uid::on.store(true);std::string bad;
-   auto exec=[&](uintptr_t rva){if(!ms::abi::found(rva))return false;uintptr_t a=image.base+rva;for(size_t i=0;i<image.count;i++){auto& h=image.ph[i];if(h.p_type==PT_LOAD&&(h.p_flags&PF_X)&&a>=image.base+h.p_vaddr&&a-(image.base+h.p_vaddr)<h.p_memsz)return (rva&3)==0;}return false;};
+   auto exec=[&](ms::abi::Offset o){auto rva=ms::abi::at(o);if(!ms::abi::found(rva))return false;
+    uintptr_t a=addrOf(o);const Image& im=imgFor(o);
+    for(size_t i=0;i<im.count;i++){auto& h=im.ph[i];if(h.p_type==PT_LOAD&&(h.p_flags&PF_X)&&a>=im.base+h.p_vaddr&&a-(im.base+h.p_vaddr)<h.p_memsz)return (rva&3)==0;}
+    return false;};
    for(auto o:{ms::abi::uiTextSet,ms::abi::uiTextPopulate,ms::abi::uiVertexClear,ms::abi::behaviourEnabled}){auto rva=ms::abi::at(o);char b[24];std::snprintf(b,sizeof(b),"0x%llx ",static_cast<unsigned long long>(rva));
-    if(!exec(rva))bad+=std::string(b)+"不在可执行段 ";else if(o==ms::abi::uiTextSet||o==ms::abi::uiTextPopulate){uint32_t w=*reinterpret_cast<const uint32_t*>(image.base+rva);if((w&0xfc000000u)==0x14000000u)bad+=std::string(b)+"是跳转 ";}}
+    if(!exec(o))bad+=std::string(b)+"不在可执行段 ";else if(o==ms::abi::uiTextSet||o==ms::abi::uiTextPopulate){uint32_t w=*reinterpret_cast<const uint32_t*>(addrOf(o));if((w&0xfc000000u)==0x14000000u)bad+=std::string(b)+"是跳转 ";}}
    if(!bad.empty())bootLog(pkg,"uid-hide-disabled","地址检查未通过："+bad);
-   else{setEnabled=reinterpret_cast<EnabledFn>(image.base+ms::abi::at(ms::abi::behaviourEnabled));vertexClear=reinterpret_cast<ClearFn>(image.base+ms::abi::at(ms::abi::uiVertexClear));
-    bool a=DobbyHook(reinterpret_cast<void*>(image.base+ms::abi::at(ms::abi::uiTextSet)),reinterpret_cast<dobby_dummy_func_t>(onTextSet),reinterpret_cast<dobby_dummy_func_t*>(&textSetOriginal))==0&&textSetOriginal;
-    bool b=DobbyHook(reinterpret_cast<void*>(image.base+ms::abi::at(ms::abi::uiTextPopulate)),reinterpret_cast<dobby_dummy_func_t>(onPopulate),reinterpret_cast<dobby_dummy_func_t*>(&populateOriginal))==0&&populateOriginal;
+   else{setEnabled=reinterpret_cast<EnabledFn>(addrOf(ms::abi::behaviourEnabled));vertexClear=reinterpret_cast<ClearFn>(addrOf(ms::abi::uiVertexClear));
+    bool a=DobbyHook(reinterpret_cast<void*>(addrOf(ms::abi::uiTextSet)),reinterpret_cast<dobby_dummy_func_t>(onTextSet),reinterpret_cast<dobby_dummy_func_t*>(&textSetOriginal))==0&&textSetOriginal;
+    bool b=DobbyHook(reinterpret_cast<void*>(addrOf(ms::abi::uiTextPopulate)),reinterpret_cast<dobby_dummy_func_t>(onPopulate),reinterpret_cast<dobby_dummy_func_t*>(&populateOriginal))==0&&populateOriginal;
     bootLog(pkg,a||b?"uid-hide":"uid-hide-disabled",std::string("UI.Text.set_text ")+(a?"已挂钩":"挂钩失败")+"，UI.Text.OnPopulateMesh "+(b?"已挂钩":"挂钩失败")+"（按“UID:数字”识别，不改动 UID 本身）");
     if(a||b)std::thread([pkg]{unsigned said=0;for(int i=0;i<90;i++){std::this_thread::sleep_for(std::chrono::seconds(20));unsigned n=uidHidden.load();if(n!=said){said=n;bootLog(pkg,"uid-hide-count","已隐藏 UID 文本 "+std::to_string(n)+" 次");}}}).detach();}}}
  // Offsets of this build not found yet (offsets.hpp pendingRequired): nothing is hooked or called.
@@ -356,22 +365,22 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
   bootLog(pkg,"tick-missing","没有可用的每帧驱动方法，跳过挂钩；其余功能继续");
   bootStatus(pkg,"ready-no-tick","缺少每帧驱动，模型替换不会刷新");
  }else{
-  int result=DobbyInstrument(reinterpret_cast<void*>(image.base+ms::abi::at(tickChoice)),onTick);
+  int result=DobbyInstrument(reinterpret_cast<void*>(addrOf(tickChoice)),onTick);
   if(result!=0){published.store(nullptr,std::memory_order_release);runtime.reset();throw std::runtime_error("DobbyInstrument 失败："+std::to_string(result));}
   bootStatus(pkg,"ready","模型运行时已就绪");
   bootLog(pkg,"tick-source",std::string("每帧驱动用 ")+ms::abi::nameOf(tickChoice));
  }
  // Replacement at the hand-off; without it the scan still replaces, just not before activation.
- {std::string bad;for(auto& c:ms::abi::handoffChecks){if(!ms::abi::found(ms::abi::at(c.rva))){bad+=std::string(ms::abi::nameOf(c.rva))+" 未解析 ";continue;}if(!codeMatches(image.base,c)){char b[24];std::snprintf(b,sizeof(b),"0x%llx ",static_cast<unsigned long long>(ms::abi::at(c.rva)));bad+=b;}}
+ {std::string bad;for(auto& c:ms::abi::handoffChecks){if(!ms::abi::found(ms::abi::at(c.rva))){bad+=std::string(ms::abi::nameOf(c.rva))+" 未解析 ";continue;}if(!codeMatches(baseFor(c.rva),c)){char b[24];std::snprintf(b,sizeof(b),"0x%llx ",static_cast<unsigned long long>(ms::abi::at(c.rva)));bad+=b;}}
   if(!bad.empty())bootLog(pkg,"spawn-hook-disabled","不可用："+bad);
-  else if(DobbyHook(reinterpret_cast<void*>(image.base+ms::abi::at(ms::abi::receive)),reinterpret_cast<dobby_dummy_func_t>(onReceive),reinterpret_cast<dobby_dummy_func_t*>(&receiveOriginal))!=0||!receiveOriginal)bootLog(pkg,"spawn-hook-disabled","DobbyHook 失败");
+  else if(DobbyHook(reinterpret_cast<void*>(addrOf(ms::abi::receive)),reinterpret_cast<dobby_dummy_func_t>(onReceive),reinterpret_cast<dobby_dummy_func_t*>(&receiveOriginal))!=0||!receiveOriginal)bootLog(pkg,"spawn-hook-disabled","DobbyHook 失败");
   else bootLog(pkg,"spawn-hook","已安装");}
  // Mesh + bone binding: each entry is hooked only when its own code bytes match.
  for(size_t i=0;i<std::size(ms::abi::bindChecks);i++){auto& c=ms::abi::bindChecks[i];const bool lod=i==0;const char* what=lod?"lod-bind-hook":"mesh-bones-hook";
   if(!ms::abi::found(ms::abi::at(c.rva))){bootLog(pkg,std::string(what)+"-disabled","本版本尚未找到偏移");continue;}
-  if(!codeMatches(image.base,c)){bootLog(pkg,std::string(what)+"-disabled","入口字节不符");continue;}
+  if(!codeMatches(baseFor(c.rva),c)){bootLog(pkg,std::string(what)+"-disabled","入口字节不符");continue;}
   auto replacement=lod?reinterpret_cast<dobby_dummy_func_t>(onLodBind):reinterpret_cast<dobby_dummy_func_t>(onMeshBones);auto* original=reinterpret_cast<dobby_dummy_func_t*>(lod?&lodBindOriginal:&meshBonesOriginal);
-  if(DobbyHook(reinterpret_cast<void*>(image.base+ms::abi::at(c.rva)),replacement,original)!=0||!*original)bootLog(pkg,std::string(what)+"-disabled","DobbyHook 失败");else bootLog(pkg,what,"已安装");}
+  if(DobbyHook(reinterpret_cast<void*>(addrOf(c.rva)),replacement,original)!=0||!*original)bootLog(pkg,std::string(what)+"-disabled","DobbyHook 失败");else bootLog(pkg,what,"已安装");}
  }catch(const std::exception& e){bootStatus(pkg,"error",e.what());}}).detach();
  }catch(const std::exception& e){exception(env,e);} }
 // The converter's 3DMigoto backend: what the INI draws (logic_import.hpp drawsJson), UTF-8 JSON in and out.
