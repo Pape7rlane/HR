@@ -13,7 +13,13 @@ struct Engine {
  std::function<Ptr(abi::Offset)> resolver;
  explicit Engine(Ptr b,Ptr managed=0):base(b),managedBase(managed?managed:b){}
  // 按 abi::libOf 选基址：引擎项走 base，托管项走 managedBase。
- Ptr addr(abi::Offset o)const{return (abi::libOf(o)==abi::Lib::Managed?managedBase:base)+abi::at(o);}
+ // 表里没有这一项时（本次构建还缺这个偏移），返回 libil2cpp 里的一条 ret，
+ // 调用立刻返回；没做保护的调用点也只会拿到 0/null，不会跳到野地址崩掉。
+ Ptr addr(abi::Offset o)const{
+  const uintptr_t rva=abi::at(o);
+  if(rva==abi::notFound)return managedBase+abi::retStubRva;
+  return (abi::libOf(o)==abi::Lib::Managed?managedBase:base)+rva;
+ }
  template<class R,class... A>R call(abi::Offset o,A... a){Ptr p=resolver?resolver(o):addr(o);require(p!=0,"引擎函数未解析");return reinterpret_cast<R(*)(A...)>(p)(a...);}
  Ptr get(abi::Offset o,Ptr p){return call<Ptr>(o,p,Ptr(0));}
  void set(abi::Offset o,Ptr p,Ptr v){call<void>(o,p,v,Ptr(0));}

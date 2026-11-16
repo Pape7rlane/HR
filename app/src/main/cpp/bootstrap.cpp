@@ -346,8 +346,13 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  auto rt=std::make_unique<ms::Runtime>(std::move(engine),pkg,priv);
  // Publish before Dobby makes Tick executable through its trampoline.
  runtime=std::move(rt);published.store(runtime.get(),std::memory_order_release);
- int result=DobbyInstrument(reinterpret_cast<void*>(image.base+ms::abi::at(ms::abi::tick)),onTick);
- if(result!=0){published.store(nullptr,std::memory_order_release);runtime.reset();throw std::runtime_error("DobbyInstrument 失败："+std::to_string(result));}bootStatus(pkg,"ready","模型运行时已就绪");
+ // tick 还没定位时不要往野地址上挂 DobbyInstrument：记一条日志，跳过每帧驱动，其余照常装。
+ if(!ms::abi::found(ms::abi::at(ms::abi::tick))){
+  bootLog(pkg,"tick-missing","tick 偏移尚未找到，跳过每帧挂钩；其余功能继续");
+  bootStatus(pkg,"ready-no-tick","tick 未定位，模型替换不会每帧刷新");
+ }else{
+  int result=DobbyInstrument(reinterpret_cast<void*>(image.base+ms::abi::at(ms::abi::tick)),onTick);
+  if(result!=0){published.store(nullptr,std::memory_order_release);runtime.reset();throw std::runtime_error("DobbyInstrument 失败："+std::to_string(result));}bootStatus(pkg,"ready","模型运行时已就绪");}
  // Replacement at the hand-off; without it the scan still replaces, just not before activation.
  {std::string bad;for(auto& c:ms::abi::handoffChecks){if(!ms::abi::found(ms::abi::at(c.rva))){bad+=std::string(ms::abi::nameOf(c.rva))+" 未解析 ";continue;}if(!codeMatches(image.base,c)){char b[24];std::snprintf(b,sizeof(b),"0x%llx ",static_cast<unsigned long long>(ms::abi::at(c.rva)));bad+=b;}}
   if(!bad.empty())bootLog(pkg,"spawn-hook-disabled","不可用："+bad);

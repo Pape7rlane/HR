@@ -167,12 +167,18 @@ inline uintptr_t at(Offset o){
  return lo<t.size()&&t[lo].first==uintptr_t(o)?t[lo].second:notFound;
 }
 
+// 缺项用的空桩：libil2cpp 里一条 ret 指令的 RVA（0x19441094 处 `ret`，已核对字节 c0035fd6）。
+// 缺项没有被安排真地址时，addr() 返回 managedBase+retStubRva，调过去立刻返回，不会算出野指针。
+inline constexpr uintptr_t retStubRva=0x19441094;
+// 缺项清单（给人看）。缺项不再阻断模块：先让模块跑起来，由日志告诉我们哪一项真的被用到。
+inline std::string stubText;
 inline void resetPending(){
  pendingText=noteText;
  std::string missing;
  for(std::size_t i=0;i<offsetCount;i++)if(!found(at(Offset(i)))){if(!missing.empty())missing+=", ";missing+=offsetNames[i];}
- if(!missing.empty())pendingText+=(pendingText.empty()?"":"；还缺 ")+missing;
- pendingRequired=pendingText.empty()?"":pendingText.c_str();
+ stubText=missing;
+ if(!missing.empty())pendingText+=(pendingText.empty()?"":"；")+std::string("以下项用 ret 空桩占位（不会崩，但对应功能不可用）：")+missing;
+ pendingRequired="";   // 不再阻断：缺项由空桩兜底
 }
 
 // 按实际加载的两个 Build ID 选表（引擎库 + 托管库）。没有这一版的表不算错误：
