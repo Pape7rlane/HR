@@ -1,0 +1,95 @@
+Loading package information...                                                  Loading local repository...                                                     [                                       ] 3% Loading local repository...        [                                       ] 3% Fetch remote repository...         [=                                      ] 3% Fetch remote repository...         [=                                      ] 4% Fetch remote repository...         [=                                      ] 5% Fetch remote repository...         [==                                     ] 5% Fetch remote repository...         [==                                     ] 6% Fetch remote repository...         [==                                     ] 7% Fetch remote repository...         [==                                     ] 7% Computing updates...               [===                                    ] 8% Computing updates...               [===                                    ] 10% Computing updates...              [===                                    ] 10% Installing CMake 3.22.1           [===                                    ] 10% Downloading cmake-3.22.1-linux.zip[====                                   ] 10% Downloading cmake-3.22.1-linux.zip[====                                   ] 11% Downloading cmake-3.22.1-linux.zip[====                                   ] 12% Downloading cmake-3.22.1-linux.zip[=====                                  ] 13% Downloading cmake-3.22.1-linux.zip[=====                                  ] 14% Downloading cmake-3.22.1-linux.zip[=====                                  ] 15% Downloading cmake-3.22.1-linux.zip[======                                 ] 15% Downloading cmake-3.22.1-linux.zip[======                                 ] 16% Downloading cmake-3.22.1-linux.zip[======                                 ] 17% Downloading cmake-3.22.1-linux.zip[=======                                ] 18% Downloading cmake-3.22.1-linux.zip[=======                                ] 19% Downloading cmake-3.22.1-linux.zip[=======                                ] 20% Downloading cmake-3.22.1-linux.zip[========                               ] 20% Downloading cmake-3.22.1-linux.zip[========                               ] 21% Downloading cmake-3.22.1-linux.zip[========                               ] 21% Unzipping...                      [========                               ] 21% Unzipping... bin/cmake            [========                               ] 22% Unzipping... bin/cmake            [=========                              ] 23% Unzipping... bin/cmake            [=========                              ] 24% Unzipping... bin/cmake            [=========                              ] 24% Unzipping... bin/ctest            [=========                              ] 25% Unzipping... bin/ctest            [==========                             ] 25% Unzipping... bin/ctest            [==========                             ] 26% Unzipping... bin/ctest            [==========                             ] 27% Unzipping... bin/ctest            [===========                            ] 28% Unzipping... bin/ctest            [===========                            ] 28% Unzipping... bin/cpack            [===========                            ] 29% Unzipping... bin/cpack            [===========                            ] 30% Unzipping... bin/cpack            [============                           ] 30% Unzipping... bin/cpack            [============                           ] 31% Unzipping... bin/cpack            [============                           ] 31% Unzipping... share/vim/vimfiles/in[============                           ] 31% Unzipping... share/vim/vimfiles/sy[============                           ] 31% Unzipping... share/aclocal/cmake.m[============                           ] 31% Unzipping... share/emacs/site-lisp[============                           ] 31% Unzipping... share/cmake-3.22/incl[============                           ] 31% Unzipping... share/cmake-3.22/Help[============                           ] 31% Unzipping... share/cmake-3.22/Temp[============                           ] 32% Unzipping... share/cmake-3.22/Temp[============                           ] 32% Unzipping... share/cmake-3.22/Modu[============                           ] 32% Unzipping... share/bash-completion[============                           ] 32% Unzipping... doc/cmake-3.22/Copyri[============                           ] 32% Unzipping... doc/cmake-3.22/cmzlib[============                           ] 32% Unzipping... doc/cmake-3.22/cmzstd[============                           ] 32% Unzipping... doc/cmake-3.22/cmnght[============                           ] 32% Unzipping... doc/cmake-3.22/cmsys/[============                           ] 32% Unzipping... doc/cmake-3.22/cmcurl[============                           ] 32% Unzipping... doc/cmake-3.22/cmlibr[============                           ] 32% Unzipping... doc/cmake-3.22/cmliba[============                           ] 32% Unzipping... doc/cmake-3.22/cmlibl[============                           ] 32% Unzipping... doc/cmake-3.22/cmlibu[============                           ] 32% Unzipping... doc/openssl-1.1.1l/LI[============                           ] 32% Unzipping... source.properties    [============                           ] 32% Unzipping... bin/ninja            [============                           ] 32% Unzipping... doc/ninja/LICENSE    [============                           ] 32% Unzipping... share/cmake-3.22/Modu[=============                          ] 33% Unzipping... share/cmake-3.22/Modu[=====================                  ] 55% Unzipping... share/cmake-3.22/Modu[=====================                  ] 55% Installing NDK (Side by side) 27.2[=====================                  ] 55% Downloading android-ndk-r27c-linux[======================                 ] 55% Downloading android-ndk-r27c-linux[======================                 ] 56% Downloading android-ndk-r27c-linux[======================                 ] 57% Downloading android-ndk-r27c-linux[=======================                ] 58% Downloading android-ndk-r27c-linux[=======================                ] 59% Downloading android-ndk-r27c-linux[=======================                ] 60% Downloading android-ndk-r27c-linux[========================               ] 60% Downloading android-ndk-r27c-linux[========================               ] 61% Downloading android-ndk-r27c-linux[========================               ] 62% Downloading android-ndk-r27c-linux[=========================              ] 63% Downloading android-ndk-r27c-linux[=========================              ] 64% Downloading android-ndk-r27c-linux[=========================              ] 65% Downloading android-ndk-r27c-linux[==========================             ] 65% Downloading android-ndk-r27c-linux[==========================             ] 66% Downloading android-ndk-r27c-linux[==========================             ] 66% Unzipping... share/cmake-3.22/Modu[==========================             ] 66% Unzipping... android-ndk-r27c/    [==========================             ] 66% Unzipping... android-ndk-r27c/READ[==========================             ] 66% Unzipping... android-ndk-r27c/meta[==========================             ] 66% Unzipping... android-ndk-r27c/shad[==========================             ] 66% Unzipping... android-ndk-r27c/ndk-[==========================             ] 66% Unzipping... android-ndk-r27c/wrap[==========================             ] 66% Unzipping... android-ndk-r27c/ndk-[==========================             ] 66% Unzipping... android-ndk-r27c/tool[==========================             ] 67% Unzipping... android-ndk-r27c/tool[===========================            ] 68% Unzipping... android-ndk-r27c/tool[===========================            ] 69% Unzipping... android-ndk-r27c/tool[===========================            ] 70% Unzipping... android-ndk-r27c/tool[============================           ] 70% Unzipping... android-ndk-r27c/tool[============================           ] 71% Unzipping... android-ndk-r27c/tool[============================           ] 72% Unzipping... android-ndk-r27c/tool[=============================          ] 73% Unzipping... android-ndk-r27c/tool[=============================          ] 74% Unzipping... android-ndk-r27c/tool[=============================          ] 75% Unzipping... android-ndk-r27c/tool[==============================         ] 75% Unzipping... android-ndk-r27c/tool[==============================         ] 76% Unzipping... android-ndk-r27c/tool[==============================         ] 77% Unzipping... android-ndk-r27c/tool[==============================         ] 77% Unzipping... android-ndk-r27c/buil[==============================         ] 77% Unzipping... android-ndk-r27c/sour[==============================         ] 77% Unzipping... android-ndk-r27c/NOTI[==============================         ] 77% Unzipping... android-ndk-r27c/ndk-[==============================         ] 77% Unzipping... android-ndk-r27c/NOTI[==============================         ] 77% Unzipping... android-ndk-r27c/pyth[==============================         ] 77% Unzipping... android-ndk-r27c/preb[==============================         ] 77% Unzipping... android-ndk-r27c/ndk-[==============================         ] 77% Unzipping... android-ndk-r27c/sour[==============================         ] 77% Unzipping... android-ndk-r27c/simp[==============================         ] 77% Unzipping... android-ndk-r27c/CHAN[==============================         ] 78% Unzipping... android-ndk-r27c/CHAN[=======================================] 100% Unzipping... android-ndk-r27c/CHA
+
+Source audit: PASS (source only: no APK/DEX/SO/AAR/JAR payloads)
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  超出范围："id"
+Traceback (most recent call last):
+  File "/home/runner/work/HR/HR/tools/test_host.py", line 12, in <module>
+    run([out/'core_test'])
+    ~~~^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/HR/HR/tools/test_host.py", line 9, in run
+    subprocess.run([str(x) for x in cmd],cwd=root,check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/home/runner/work/HR/HR/build/host/core_test']' died with <Signals.SIGABRT: 6>.
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.7.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:processDebugNavigationResources
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:javaPreCompileDebug
+> Task :app:parseDebugLocalResources
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets
+> Task :app:generateDebugRFile
+> Task :app:generateDebugGlobalSynthetics
+> Task :app:desugarDebugFileDependencies
+> Task :app:checkDebugDuplicateClasses
+> Task :app:checkDebugAarMetadata
+> Task :app:mapDebugSourceSetPaths
+> Task :app:mergeLibDexDebug
+> Task :app:compileDebugNavigationResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugResources
+> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:processDebugResources
+> Task :app:mergeExtDexDebug
+
+> Task :app:buildCMakeDebug[arm64-v8a][hsrbox]
+C/C++: ninja: Entering directory `/home/runner/work/HR/HR/app/.cxx/Debug/4q5f2o5h/arm64-v8a'
+C/C++: /home/runner/work/HR/HR/app/src/main/cpp/api_probe.cpp:42:23: warning: variable 'syment' set but not used [-Wunused-but-set-variable]
+C/C++:    42 |     size_t strsz = 0, syment = 0;
+C/C++:       |                       ^
+C/C++: 1 warning generated.
+C/C++: /home/runner/work/HR/HR/app/.cxx/Debug/4q5f2o5h/arm64-v8a/_deps/dobby_source-src/source/InterceptRouting/InterceptRouting.cpp:11:5: warning: 'snprintf' will always be truncated; specified size is 3, but format string expands to at least 4 [-Wformat-truncation]
+C/C++:    11 |     snprintf(output + strlen(output), 3, "%02x ", *((uint8_t *)buffer + i));
+C/C++:       |     ^
+C/C++: 1 warning generated.
+C/C++: /home/runner/work/HR/HR/app/.cxx/Debug/4q5f2o5h/arm64-v8a/_deps/dobby_source-src/source/Backend/UserMode/PlatformUtil/Linux/ProcessRuntimeUtility.cc:14:9: warning: 'LINE_MAX' macro redefined [-Wmacro-redefined]
+C/C++:    14 | #define LINE_MAX 2048
+C/C++:       |         ^
+C/C++: /usr/local/lib/android/sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/limits.h:140:9: note: previous definition is here
+C/C++:   140 | #define LINE_MAX _POSIX2_LINE_MAX
+C/C++:       |         ^
+C/C++: 1 warning generated.
+
+> Task :app:compileDebugKotlin
+
+> Task :app:buildCMakeDebug[arm64-v8a][hsrbox]
+C/C++: /home/runner/work/HR/HR/app/src/main/cpp/runtime.cpp:2106:78: warning: misleading indentation; statement is not part of the previous 'for' [-Wmisleading-indentation]
+C/C++:  2106 |     if(matches(partOf(a).target,partOf(owner).target)){source=&owner;break;}}if(source)break;}
+C/C++:       |                                                                              ^
+C/C++: /home/runner/work/HR/HR/app/src/main/cpp/runtime.cpp:2105:52: note: previous statement is here
+C/C++:  2105 |   for(auto& kv:attachments){auto& owner=*kv.second;for(Ptr p:incoming)if(owner.materialSources.count(p)){known=true;
+C/C++:       |                                                    ^
+C/C++: 1 warning generated.
+
+> Task :app:compileDebugJavaWithJavac
+> Task :app:processDebugJavaRes
+> Task :app:mergeDebugJavaResource
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugNativeLibs
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:stripDebugDebugSymbols
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_5-1794817298036.json
+
+BUILD SUCCESSFUL in 59s
+39 actionable tasks: 39 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.7.1/userguide/configuration_cache_enabling.html
