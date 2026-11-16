@@ -110,12 +110,15 @@ inline const char* nameOf(Offset o){std::size_t i=std::size_t(o);return i<offset
 enum class Lib : uint8_t { Engine, Managed };
 inline constexpr Lib libOf(Offset o){
  switch(o){
-  // il2cpp 运行时：对象/数组分配、反射、脚本包装、字符串、GC 句柄
-  case manager: case arrayNew: case objectNew: case typeObject: case classFromType:
-  case wrapperFor: case newString: case pin: case unpin:
-   return Lib::Managed;
-  // 其余（Mesh / Texture / Material / Renderer / LOD / UI / Tick / 分配器）都在 Unity 引擎里
-  default: return Lib::Engine;
+  // 仅这 5 项是 libunity.so 里的 C++ 原生函数：引擎分配器、原生查找、LOD 切网格、BindMeshBones。
+  case nativeAlloc: case nativeAllocator: case findObjectsNative:
+  case lodBind: case meshBones:
+   return Lib::Engine;
+  // 其余全部是托管方法，编译在 libil2cpp.so 里。
+  // 崩铁的 Unity 托管程序集（UnityEngine.CoreModule 等）和游戏程序集一起编进 libil2cpp.so，
+  // 所以 Mesh/Renderer/Material/Texture/Object 这些 C# 方法、以及 il2cpp 运行时入口都在这一侧。
+  // （原神是单库构造，两库基址相同，这个分类不产生影响；崩铁必须分对，否则基址会配错。）
+  default: return Lib::Managed;
  }
 }
 inline const char* libName(Lib l){return l==Lib::Managed?"libil2cpp.so":"libunity.so";}
