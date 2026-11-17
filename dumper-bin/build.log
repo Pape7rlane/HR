@@ -1,0 +1,7 @@
+[arm64-v8a] Compile        : il2cppdumper <= jni_entry.c
+[arm64-v8a] Compile        : il2cppdumper <= il2cpp_dump.c
+[arm64-v8a] Compile        : il2cppdumper <= il2cpp_api.c
+[arm64-v8a] Compile        : il2cppdumper <= elf_sym_find.c
+[arm64-v8a] Compile        : il2cppdumper <= script_writer.c
+[arm64-v8a] SharedLibrary  : libil2cppdumper.so
+[arm64-v8a] Install        : libil2cppdumper.so => libs/arm64-v8a/libil2cppdumper.so
