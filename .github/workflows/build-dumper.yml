@@ -1,0 +1,37 @@
+name: Build il2cppdumper
+on:
+  push:
+    branches: [dumper]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: NDK
+        run: sdkmanager 'ndk;27.2.12479018' 2>&1 | tail -3
+      - name: ndk-build
+        run: |
+          set -o pipefail
+          $ANDROID_HOME/ndk/27.2.12479018/ndk-build \
+            NDK_PROJECT_PATH=dumper \
+            NDK_APPLICATION_MK=dumper/jni/Application.mk \
+            APP_ABI=arm64-v8a APP_PLATFORM=android-21 2>&1 | tee build.log
+      - name: Publish .so to a branch
+        if: always()
+        run: |
+          git config user.name ci
+          git config user.email ci@local
+          git checkout -B dumper-bin
+          rm -rf dumper-bin
+          mkdir -p dumper-bin
+          cp -f dumper/libs/arm64-v8a/libil2cppdumper.so dumper-bin/ 2>/dev/null || true
+          cp -f build.log dumper-bin/ 2>/dev/null || true
+          git add -f dumper-bin
+          git commit -m "dumper build for ${GITHUB_SHA}" || true
+          git push -f origin dumper-bin
