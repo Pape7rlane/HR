@@ -359,6 +359,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_hsrbox_tool_NativeBridge_start(JNIEnv
  // Runtime::tick 自己按 100ms 节流（next=now+100），所以用高频方法顶替不会导致重复处理。
  ms::abi::Offset tickChoice=ms::abi::tick;
  bool haveDriver=ms::abi::found(ms::abi::at(tickChoice));
+ // 顺序按"游戏每帧读它的可能性"排：deltaTime/time 远高于 frameCount。
+ if(!haveDriver&&ms::abi::found(ms::abi::at(ms::abi::timeDelta))){tickChoice=ms::abi::timeDelta;haveDriver=true;}
+ if(!haveDriver&&ms::abi::found(ms::abi::at(ms::abi::timeNow))){tickChoice=ms::abi::timeNow;haveDriver=true;}
+ if(!haveDriver&&ms::abi::found(ms::abi::at(ms::abi::timeReal))){tickChoice=ms::abi::timeReal;haveDriver=true;}
  if(!haveDriver&&ms::abi::found(ms::abi::at(ms::abi::frameCount))){tickChoice=ms::abi::frameCount;haveDriver=true;}
  if(!haveDriver&&ms::abi::found(ms::abi::at(ms::abi::getMesh))){tickChoice=ms::abi::getMesh;haveDriver=true;}
  if(!haveDriver){

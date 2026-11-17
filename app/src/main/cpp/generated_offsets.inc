@@ -1,6 +1,4 @@
-// 4.6.54 测试服（libil2cpp Build ID 8c76cb8b4f65ae2a，已实测比对一致）
-// 60 项来自 Telegram 的 dump.cs（Build 593b5fd2bc877ce5），入口字节取自运行中进程内存
-// 注意：这 60 项全在 libil2cpp.so 的 il2cpp 段内，libOf() 已改为默认 Managed
+// 4.6.54 测试服（libil2cpp Build ID 8c76cb8b4f65ae2a，实测一致）
 inline std::vector<Profile>& profiles(){
  static std::vector<Profile> v{
   Profile{"e0f4489eec5b2a62","8c76cb8b4f65ae2a","dump.cs 提取的 Unity 托管方法 RVA。还缺：tick, manager, arrayNew, objectNew, pin, unpin, setReadable, getBindposes, newString, nativeAlloc, nativeAllocator, findObjectsNative, lodPause, lodResume, lodSelfPaused, lodCurrent, receive, lodBind, meshBones, wrapperFor, typeObject, classFromType",0xc4e,0x0,0x0,0x0,{},{},{},
@@ -65,6 +63,9 @@ inline std::vector<Profile>& profiles(){
     {textureHeight,0x19497ea8},
     {textureFormat,0x1949b610},
     {textureMips,0x1949aab8},
+    {timeNow,0x1949ea68},
+    {timeDelta,0x1949ea98},
+    {timeReal,0x1949ec00},
    },
    {
     {getMesh,"c00e41f908dc4239c8f7ff35f0494196"},
@@ -127,6 +128,9 @@ inline std::vector<Profile>& profiles(){
     {textureHeight,"08dc4239a8f1ff35713e4196e80240f9"},
     {textureFormat,"f0304196fe4fbfa9333e01d068f26f39"},
     {textureMips,"c0035fd620008052fe0741f8c0035fd6"},
+    {timeNow,"8a0a00b44c1940b91f010c6be2090054"},
+    {timeDelta,"49c12b8b2981c039a900f837281d0012"},
+    {timeReal,"8800a072ea1a0190a9ee41f9406d42f9"},
    }}
  };
  return v;}

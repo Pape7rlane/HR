@@ -2885,7 +2885,7 @@ struct Runtime::Impl {
   if(!cerr.empty())log("control-error",cerr);}
  // The step a failing tick was in, for tick-error (0.7.106: a whole minute of "托管数组超出上限" said nothing more).
  const char* tickPhase="";std::string tickErrorSaid;uint64_t tickErrorAt=0;unsigned tickErrorRepeats=0;
- void tick(uint64_t now){if(inTick)return;bindingNow=now;if(now<next){guard(now);animationTick(now);return;}inTick=true;next=now+100;tickPhase="开始";
+ void tick(uint64_t now){{static std::atomic<unsigned> hb{0};unsigned n=hb.fetch_add(1,std::memory_order_relaxed);if(n<3||n%2000==0)log("tick-heartbeat","第 "+std::to_string(n)+" 次");}if(inTick)return;bindingNow=now;if(now<next){guard(now);animationTick(now);return;}inTick=true;next=now+100;tickPhase="开始";
   try{
    if(!tickTid.load())tickTid.store(threadId());
    // consume() may replace `models`: hand-off pointers into it are dropped first and set again below.

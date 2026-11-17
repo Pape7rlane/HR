@@ -75,9 +75,11 @@ enum Offset : uintptr_t {
  wrapperFor,
  typeObject,classFromType,
  meshSubmeshes,meshVertices,meshReadable,meshIndexStart,meshIndexCount,
- textureWidth,textureHeight,textureFormat,textureMips
+ textureWidth,textureHeight,textureFormat,textureMips,
+ // 每帧驱动候选：游戏读这些属性的频率通常远高于 frameCount
+ timeNow,timeDelta,timeReal
 };
-inline constexpr std::size_t offsetCount=std::size_t(textureMips)+1;
+inline constexpr std::size_t offsetCount=std::size_t(timeReal)+1;
 inline const char* const offsetNames[offsetCount]={
  "tick","manager",
  "getMesh","setMesh","getBones","getMaterials","setMaterials",
@@ -101,7 +103,8 @@ inline const char* const offsetNames[offsetCount]={
  "wrapperFor",
  "typeObject","classFromType",
  "meshSubmeshes","meshVertices","meshReadable","meshIndexStart","meshIndexCount",
- "textureWidth","textureHeight","textureFormat","textureMips"
+ "textureWidth","textureHeight","textureFormat","textureMips",
+ "timeNow","timeDelta","timeReal"
 };
 inline const char* nameOf(Offset o){std::size_t i=std::size_t(o);return i<offsetCount?offsetNames[i]:"?";}
 
