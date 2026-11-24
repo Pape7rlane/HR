@@ -1,9 +1,8 @@
-// 官方安卓 4.6.0（libil2cpp Build ID 593b5fd2bc877ce5）
-// RVA 直接来自同名构建的 dump.cs，已在 APK 里逐条反汇编核对
-// libunity.so Build ID f048ec2098d0e7ed
+// 官方安卓 4.6.0（libil2cpp Build ID 593b5fd2bc877ce5 / libunity f048ec2098d0e7ed）
+// RVA 直接来自同名构建的 dump.cs，每条都在 APK 的 so 里反汇编核对过
 inline std::vector<Profile>& profiles(){
  static std::vector<Profile> v{
-  Profile{"f048ec2098d0e7ed","593b5fd2bc877ce5","4.6.0 官方版 dump 直取。还缺：tick, manager, arrayNew, objectNew, pin, unpin, setReadable, getBindposes, newString, nativeAlloc, nativeAllocator, findObjectsNative, lodPause, lodResume, lodSelfPaused, lodCurrent, receive, lodBind, meshBones, wrapperFor, typeObject, classFromType, textureFormat, timeNow, timeDelta, timeReal",0xc4e,0x0,0x0,0x0,{},{},{},
+  Profile{"f048ec2098d0e7ed","593b5fd2bc877ce5","4.6.0 官方版 dump 直取。还缺：tick, manager, arrayNew, objectNew, pin, unpin, setReadable, getBindposes, newString, nativeAlloc, nativeAllocator, findObjectsNative, lodPause, lodResume, lodSelfPaused, lodCurrent, receive, lodBind, meshBones, wrapperFor, typeObject, classFromType",0xc4e,0x0,0x0,0x0,{},{},{},
    {
     {getMesh,0x194950a8},
     {setMesh,0x194950c0},
@@ -63,7 +62,11 @@ inline std::vector<Profile>& profiles(){
     {meshIndexCount,0x1946b900},
     {textureWidth,0x19497e90},
     {textureHeight,0x19497ea8},
+    {textureFormat,0x1949b610},
     {textureMips,0x1949aab8},
+    {timeNow,0x1949ea68},
+    {timeDelta,0x1949ea98},
+    {timeReal,0x1949ec00},
    },
    {
     {getMesh,"b77428a1b77428a1b67777c33fd27787"},
@@ -124,7 +127,11 @@ inline std::vector<Profile>& profiles(){
     {meshIndexCount,"fe0f1ff848a3009008dd41f900013fd6"},
     {textureWidth,"8374745d8274755d817476dd807477dd"},
     {textureHeight,"017b77c3bf75378e77d676e662a07ce1"},
+    {textureFormat,"fe0f1ff8c8a100d0089144f900013fd6"},
     {textureMips,"fe0f1ff8c8a100f008c943f900013fd6"},
+    {timeNow,"fe0f1ff8a8a100f008b545f900013fd6"},
+    {timeDelta,"fe0f1ff8a8a100f008bd45f900013fd6"},
+    {timeReal,"fe0f1ff8a8a100f0080146f900013fd6"},
    }}
  };
  return v;}
